@@ -112,8 +112,8 @@ function JoinOrgForm() {
     }
 
     // Add user to organization with the role specified in the invite
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: roleError } = await (supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .from("user_organization_roles") as any)
       .insert({
         user_id: user.id,

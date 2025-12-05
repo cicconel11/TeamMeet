@@ -17,7 +17,6 @@ interface OrgPreference {
 
 export default function NotificationSettingsPage() {
   const [preferences, setPreferences] = useState<OrgPreference[]>([]);
-  const [userOrgs, setUserOrgs] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -46,8 +45,6 @@ export default function NotificationSettingsPage() {
         const org = r.organizations as { id: string; name: string; slug: string };
         return org;
       }).filter(Boolean);
-
-      setUserOrgs(orgs);
 
       // Get existing preferences
       const { data: prefs } = await supabase
