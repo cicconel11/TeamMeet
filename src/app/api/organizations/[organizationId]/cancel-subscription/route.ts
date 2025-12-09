@@ -59,8 +59,7 @@ export async function POST(_req: Request, { params }: RouteParams) {
       updated_at: new Date().toISOString(),
     };
 
-    await serviceSupabase
-      .from("organization_subscriptions")
+    await (serviceSupabase.from("organization_subscriptions") as any)
       .update(payload)
       .eq("organization_id", organizationId);
 
