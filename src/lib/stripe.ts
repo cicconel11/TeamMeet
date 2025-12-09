@@ -1,11 +1,35 @@
 import Stripe from "stripe";
 import type { AlumniBucket, SubscriptionInterval } from "@/types/database";
+import { requireEnv } from "./env";
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripeSecretKey = requireEnv("STRIPE_SECRET_KEY");
+const stripePublishableKey = requireEnv("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY");
+const supabaseUrlForAudit = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+const supabaseAnonKeyForAudit = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+const supabaseServiceRoleForAudit = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+const priceEnv = {
+  STRIPE_PRICE_BASE_MONTHLY: requireEnv("STRIPE_PRICE_BASE_MONTHLY"),
+  STRIPE_PRICE_BASE_YEARLY: requireEnv("STRIPE_PRICE_BASE_YEARLY"),
+  STRIPE_PRICE_ALUMNI_0_200_MONTHLY: requireEnv("STRIPE_PRICE_ALUMNI_0_200_MONTHLY"),
+  STRIPE_PRICE_ALUMNI_0_200_YEARLY: requireEnv("STRIPE_PRICE_ALUMNI_0_200_YEARLY"),
+  STRIPE_PRICE_ALUMNI_201_600_MONTHLY: requireEnv("STRIPE_PRICE_ALUMNI_201_600_MONTHLY"),
+  STRIPE_PRICE_ALUMNI_201_600_YEARLY: requireEnv("STRIPE_PRICE_ALUMNI_201_600_YEARLY"),
+  STRIPE_PRICE_ALUMNI_601_1500_MONTHLY: requireEnv("STRIPE_PRICE_ALUMNI_601_1500_MONTHLY"),
+  STRIPE_PRICE_ALUMNI_601_1500_YEARLY: requireEnv("STRIPE_PRICE_ALUMNI_601_1500_YEARLY"),
+} as const;
 
-if (!stripeSecretKey) {
-  throw new Error("STRIPE_SECRET_KEY is not configured");
+function validatePriceIds() {
+  Object.entries(priceEnv).forEach(([key, value]) => {
+    if (!value || value.trim() === "") {
+      throw new Error(`Invalid Stripe price id for ${key}: <empty>`);
+    }
+    if (!value.startsWith("price_") || value.startsWith("cs_") || value.startsWith("prod_")) {
+      throw new Error(`Invalid Stripe price id for ${key}: ${value}`);
+    }
+  });
 }
+
+validatePriceIds();
 
 export const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2025-11-17.clover",
@@ -19,22 +43,22 @@ export const stripe = new Stripe(stripeSecretKey, {
 type PriceMap = Record<SubscriptionInterval, string>;
 
 const basePrices: PriceMap = {
-  month: process.env.STRIPE_PRICE_BASE_MONTHLY || "",
-  year: process.env.STRIPE_PRICE_BASE_YEARLY || "",
+  month: priceEnv.STRIPE_PRICE_BASE_MONTHLY,
+  year: priceEnv.STRIPE_PRICE_BASE_YEARLY,
 };
 
 const alumniPrices: Record<Exclude<AlumniBucket, "none" | "1500+">, PriceMap> = {
   "0-200": {
-    month: process.env.STRIPE_PRICE_ALUMNI_0_200_MONTHLY || "",
-    year: process.env.STRIPE_PRICE_ALUMNI_0_200_YEARLY || "",
+    month: priceEnv.STRIPE_PRICE_ALUMNI_0_200_MONTHLY,
+    year: priceEnv.STRIPE_PRICE_ALUMNI_0_200_YEARLY,
   },
   "201-600": {
-    month: process.env.STRIPE_PRICE_ALUMNI_201_600_MONTHLY || "",
-    year: process.env.STRIPE_PRICE_ALUMNI_201_600_YEARLY || "",
+    month: priceEnv.STRIPE_PRICE_ALUMNI_201_600_MONTHLY,
+    year: priceEnv.STRIPE_PRICE_ALUMNI_201_600_YEARLY,
   },
   "601-1500": {
-    month: process.env.STRIPE_PRICE_ALUMNI_601_1500_MONTHLY || "",
-    year: process.env.STRIPE_PRICE_ALUMNI_601_1500_YEARLY || "",
+    month: priceEnv.STRIPE_PRICE_ALUMNI_601_1500_MONTHLY,
+    year: priceEnv.STRIPE_PRICE_ALUMNI_601_1500_YEARLY,
   },
 };
 
@@ -60,6 +84,19 @@ export function isSalesLedBucket(bucket: AlumniBucket) {
   return bucket === "1500+";
 }
 
-export const STRIPE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+export const STRIPE_PUBLISHABLE_KEY = stripePublishableKey;
+
+const shouldLogEnvAudit = process.env.NODE_ENV !== "production";
+let envAuditLogged = false;
+
+if (shouldLogEnvAudit && !envAuditLogged) {
+  void supabaseUrlForAudit;
+  void supabaseAnonKeyForAudit;
+  void supabaseServiceRoleForAudit;
+  console.info("✅ All required env vars present");
+  console.info("✅ All Stripe Price IDs valid");
+  console.info("✅ Supabase keys loaded successfully");
+  envAuditLogged = true;
+}
 
 

@@ -2,17 +2,18 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
+import { requireEnv } from "@/lib/env";
 import type { Database } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+const webhookSecret = requireEnv("STRIPE_WEBHOOK_SECRET");
 
 export async function POST(req: Request) {
   const signature = req.headers.get("stripe-signature");
-  if (!signature || !webhookSecret) {
+  if (!signature) {
     return NextResponse.json({ error: "Missing webhook secret" }, { status: 400 });
   }
 
