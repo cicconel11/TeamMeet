@@ -16,12 +16,15 @@ interface RequestBody {
 }
 
 export async function POST(req: Request) {
+  console.log("[create-org-checkout] Starting...");
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
+    console.log("[create-org-checkout] Unauthorized - no user");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  console.log("[create-org-checkout] User:", user.id, user.email);
 
   let body: RequestBody;
   try {
@@ -107,6 +110,7 @@ export async function POST(req: Request) {
 
     const { basePrice, alumniPrice } = getPriceIds(interval, bucket);
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+    console.log("[create-org-checkout] Creating Stripe session with prices:", { basePrice, alumniPrice, origin });
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -142,8 +146,10 @@ export async function POST(req: Request) {
         .eq("organization_id", org.id);
     }
 
+    console.log("[create-org-checkout] Success! Checkout URL:", session.url);
     return NextResponse.json({ url: session.url });
   } catch (error) {
+    console.error("[create-org-checkout] Error:", error);
     if (organizationId) {
       // Best-effort cleanup on failure
       await supabase.from("organization_subscriptions").delete().eq("organization_id", organizationId);

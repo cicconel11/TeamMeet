@@ -38,6 +38,8 @@ export default function CreateOrgPage() {
     setInfoMessage(null);
 
     try {
+      console.log("Creating org checkout with:", { name, slug, billingInterval, alumniBucket });
+      
       const response = await fetch("/api/stripe/create-org-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -52,6 +54,7 @@ export default function CreateOrgPage() {
       });
 
       const data = await response.json();
+      console.log("Create org response:", response.status, data);
 
       if (!response.ok) {
         throw new Error(data.error || "Unable to start checkout");
@@ -64,12 +67,14 @@ export default function CreateOrgPage() {
       }
 
       if (data.url) {
+        console.log("Redirecting to Stripe:", data.url);
         window.location.href = data.url as string;
         return;
       }
 
       throw new Error("Missing checkout URL");
     } catch (err) {
+      console.error("Create org error:", err);
       setError(err instanceof Error ? err.message : "Something went wrong");
       setIsLoading(false);
     }
