@@ -12,6 +12,7 @@ export interface Organization {
   description: string | null;
   logo_url: string | null;
   primary_color: string | null;
+  stripe_connect_account_id: string | null;
   created_at: string;
 }
 
@@ -207,13 +208,30 @@ export interface OrganizationSubscription {
   updated_at: string;
 }
 
+export type OrganizationDonationStatus = "pending" | "succeeded" | "failed";
+
+export interface OrganizationDonation {
+  id: string;
+  organization_id: string;
+  stripe_payment_intent_id: string | null;
+  amount_cents: number;
+  donor_name: string | null;
+  donor_email: string | null;
+  event_id: string | null;
+  purpose: string | null;
+  status: OrganizationDonationStatus;
+  created_at: string;
+}
+
 // Supabase Database type for typed client
 export interface Database {
   public: {
     Tables: {
       organizations: {
         Row: Organization;
-        Insert: Omit<Organization, "id" | "created_at">;
+        Insert: Omit<Organization, "id" | "created_at" | "stripe_connect_account_id"> & {
+          stripe_connect_account_id?: string | null;
+        };
         Update: Partial<Omit<Organization, "id">>;
       };
       users: {
@@ -313,6 +331,14 @@ export interface Database {
           status?: string;
         };
         Update: Partial<Omit<OrganizationSubscription, "id">>;
+      };
+      organization_donations: {
+        Row: OrganizationDonation;
+        Insert: Omit<OrganizationDonation, "id" | "created_at"> & {
+          stripe_payment_intent_id?: string | null;
+          status?: OrganizationDonationStatus;
+        };
+        Update: Partial<Omit<OrganizationDonation, "id" | "created_at">>;
       };
     };
     Enums: {

@@ -99,7 +99,7 @@ export default function CreateOrgPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-2xl mx-auto px-6 py-12">
+      <main className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         <div className="mb-8">
           <Link href="/app" className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -194,7 +194,7 @@ export default function CreateOrgPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-foreground">Billing Interval</p>
                   <div className="flex gap-2">

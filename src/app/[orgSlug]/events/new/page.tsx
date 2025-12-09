@@ -107,7 +107,7 @@ export default function NewEventPage() {
         backHref={`/${orgSlug}/events`}
       />
 
-      <Card className="max-w-2xl">
+      <Card className="w-full max-w-2xl">
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">

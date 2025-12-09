@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrgSidebar } from "@/components/layout/OrgSidebar";
+import { MobileNav } from "@/components/layout/MobileNav";
 import { BillingGate } from "@/components/layout/BillingGate";
 
 interface OrgLayoutProps {
@@ -66,10 +67,10 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
     }
 
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4 sm:px-6">
         <div className="max-w-md text-center space-y-4">
-          <h1 className="text-2xl font-semibold text-foreground">Organization not active</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Organization not active</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             This organization&apos;s subscription is not active yet. Please contact an admin.
           </p>
         </div>
@@ -91,8 +92,16 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
           : "#0f2a4f",
       } as React.CSSProperties}
     >
-      <OrgSidebar organization={organization} userRole={userRole.role} />
-      <main className="ml-64 p-8">
+      {/* Mobile: Hamburger menu navigation */}
+      <MobileNav organization={organization} userRole={userRole.role} />
+
+      {/* Desktop: Fixed sidebar */}
+      <div className="hidden md:block">
+        <OrgSidebar organization={organization} userRole={userRole.role} />
+      </div>
+
+      {/* Main content - full width on mobile, offset on desktop */}
+      <main className="md:ml-64 p-4 sm:p-6 md:p-8">
         {children}
       </main>
     </div>

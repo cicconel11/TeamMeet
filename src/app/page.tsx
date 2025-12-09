@@ -111,8 +111,18 @@ export default async function LandingPage() {
 
       {/* Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 py-8">
-        <div className="max-w-6xl mx-auto px-6 text-center text-sm text-slate-400">
-          <p>© {new Date().getFullYear()} TeamNetwork. Built with Next.js and Supabase.</p>
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-400">
+            <p>© {new Date().getFullYear()} TeamNetwork. Operated by McKillop LLC.</p>
+            <div className="flex items-center gap-6">
+              <Link href="/terms" className="hover:text-white transition-colors">
+                Terms of Service
+              </Link>
+              <a href="mailto:mckillopm25@gmail.com" className="hover:text-white transition-colors">
+                Contact
+              </a>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

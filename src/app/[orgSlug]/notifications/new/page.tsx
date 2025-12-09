@@ -124,7 +124,7 @@ export default function NewNotificationPage() {
         backHref={`/${orgSlug}/notifications`}
       />
 
-      <Card className="max-w-2xl p-6">
+      <Card className="w-full max-w-2xl p-6">
         {error && (
           <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
             {error}

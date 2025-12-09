@@ -154,6 +154,77 @@ export async function POST(req: Request) {
       }
       break;
     }
+
+    // Donation payment intent handlers
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    case "payment_intent.succeeded": {
+      const pi = event.data.object as Stripe.PaymentIntent;
+      const orgId = pi.metadata?.organization_id;
+      if (!orgId) break;
+
+      // Check for duplicate (idempotency)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingSucceeded } = await (supabase as any)
+        .from("organization_donations")
+        .select("id")
+        .eq("stripe_payment_intent_id", pi.id)
+        .maybeSingle();
+      if (existingSucceeded) break;
+
+      const amountSucceeded = pi.amount_received ?? pi.amount ?? 0;
+      const donorNameSucceeded = pi.metadata?.donor_name || null;
+      const donorEmailSucceeded = pi.receipt_email || null;
+      const eventIdSucceeded = pi.metadata?.event_id || null;
+      const purposeSucceeded = pi.metadata?.purpose || null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("organization_donations").insert({
+        organization_id: orgId,
+        stripe_payment_intent_id: pi.id,
+        amount_cents: amountSucceeded,
+        donor_name: donorNameSucceeded,
+        donor_email: donorEmailSucceeded,
+        event_id: eventIdSucceeded || null,
+        purpose: purposeSucceeded,
+        status: "succeeded",
+      });
+      break;
+    }
+
+    case "payment_intent.payment_failed": {
+      const piFailed = event.data.object as Stripe.PaymentIntent;
+      const orgIdFailed = piFailed.metadata?.organization_id;
+      if (!orgIdFailed) break;
+
+      // Check for duplicate (idempotency)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingFailed } = await (supabase as any)
+        .from("organization_donations")
+        .select("id")
+        .eq("stripe_payment_intent_id", piFailed.id)
+        .maybeSingle();
+      if (existingFailed) break;
+
+      const amountFailed = piFailed.amount ?? 0;
+      const donorNameFailed = piFailed.metadata?.donor_name || null;
+      const donorEmailFailed = piFailed.receipt_email || null;
+      const eventIdFailed = piFailed.metadata?.event_id || null;
+      const purposeFailed = piFailed.metadata?.purpose || null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("organization_donations").insert({
+        organization_id: orgIdFailed,
+        stripe_payment_intent_id: piFailed.id,
+        amount_cents: amountFailed,
+        donor_name: donorNameFailed,
+        donor_email: donorEmailFailed,
+        event_id: eventIdFailed || null,
+        purpose: purposeFailed,
+        status: "failed",
+      });
+      break;
+    }
+
     default:
       // Ignore other events for now
       break;

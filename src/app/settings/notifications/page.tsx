@@ -162,24 +162,29 @@ export default function NotificationSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="animate-pulse space-y-4">
-        <div className="h-8 w-64 bg-muted rounded-xl" />
-        <div className="h-4 w-96 bg-muted rounded-xl" />
-        <Card className="p-6">
-          <div className="h-32 bg-muted rounded-xl" />
-        </Card>
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 py-8 sm:py-12">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 w-64 bg-muted rounded-xl" />
+            <div className="h-4 w-full max-w-sm bg-muted rounded-xl" />
+            <Card className="p-6">
+              <div className="h-32 bg-muted rounded-xl" />
+            </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Notification Preferences</h1>
-        <p className="text-muted-foreground">
-          Manage how you receive notifications from your organizations.
-        </p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 py-8 sm:py-12">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Notification Preferences</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Manage how you receive notifications from your organizations.
+          </p>
+        </div>
 
       {message && (
         <div
@@ -284,6 +289,7 @@ export default function NotificationSettingsPage() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

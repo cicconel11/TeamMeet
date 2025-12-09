@@ -1,132 +1,213 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { Organization } from "@/types/database";
 
-interface OrgSidebarProps {
+interface MobileNavProps {
   organization: Organization;
   userRole: string;
 }
 
 const navItems = [
-  { href: "", label: "Dashboard", icon: HomeIcon, adminOnly: false },
-  { href: "/members", label: "Members", icon: UsersIcon, adminOnly: false },
-  { href: "/alumni", label: "Alumni", icon: GraduationCapIcon, adminOnly: false },
-  { href: "/events", label: "Events", icon: CalendarIcon, adminOnly: false },
-  { href: "/announcements", label: "Announcements", icon: MegaphoneIcon, adminOnly: false },
-  { href: "/philanthropy", label: "Philanthropy", icon: HeartIcon, adminOnly: false },
-  { href: "/records", label: "Records", icon: TrophyIcon, adminOnly: false },
-  { href: "/competitions/wagner-cup", label: "Wagner Cup", icon: AwardIcon, adminOnly: false },
-  { href: "/notifications", label: "Notifications", icon: BellIcon, adminOnly: true },
-  { href: "/settings/invites", label: "Invite Members", icon: InviteIcon, adminOnly: true },
+  { href: "", label: "Dashboard", icon: HomeIcon },
+  { href: "/members", label: "Members", icon: UsersIcon },
+  { href: "/alumni", label: "Alumni", icon: GraduationCapIcon },
+  { href: "/events", label: "Events", icon: CalendarIcon },
+  { href: "/announcements", label: "Announcements", icon: MegaphoneIcon },
+  { href: "/philanthropy", label: "Philanthropy", icon: HeartIcon },
+  { href: "/records", label: "Records", icon: TrophyIcon },
+  { href: "/competitions/wagner-cup", label: "Wagner Cup", icon: AwardIcon },
 ];
 
-export function OrgSidebar({ organization, userRole }: OrgSidebarProps) {
+const adminNavItems = [
+  { href: "/notifications", label: "Notifications", icon: BellIcon },
+  { href: "/settings/invites", label: "Invite Members", icon: InviteIcon },
+];
+
+export function MobileNav({ organization, userRole }: MobileNavProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const basePath = `/${organization.slug}`;
   const isAdmin = userRole === "admin";
 
-  // Filter nav items based on user role
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
+  const allNavItems = isAdmin ? [...navItems, ...adminNavItems] : navItems;
+
+  const closeMenu = () => setIsOpen(false);
 
   return (
-    <aside className="hidden md:flex fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex-col z-40">
-      {/* Logo/Org Header */}
-      <div className="p-6 border-b border-border">
-        <Link href={basePath} className="flex items-center gap-3">
-          {organization.logo_url ? (
-            <div className="relative h-10 w-10 rounded-xl overflow-hidden">
-              <Image
-                src={organization.logo_url}
-                alt={organization.name}
-                fill
-                className="object-cover"
-                sizes="40px"
-                priority={false}
-              />
-            </div>
-          ) : (
-            <div 
-              className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-              style={{ backgroundColor: organization.primary_color || "var(--color-org-primary)" }}
-            >
-              {organization.name.charAt(0)}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <h2 className="font-semibold text-foreground truncate">{organization.name}</h2>
-            <p className="text-xs text-muted-foreground">TeamNetwork</p>
-          </div>
-        </Link>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto p-4">
-        <ul className="space-y-1">
-          {visibleNavItems.map((item) => {
-            const href = `${basePath}${item.href}`;
-            const isActive = pathname === href || (item.href !== "" && pathname.startsWith(href));
-            const Icon = item.icon;
-
-            return (
-              <li key={item.href}>
-                <Link
-                  href={href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? "bg-org-primary text-white"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      {/* User Section */}
-      <div className="p-4 border-t border-border space-y-1">
-        <Link
-          href="/app"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
-        >
-          <SwitchIcon className="h-5 w-5" />
-          Switch Organization
-        </Link>
-        <Link
-          href="/app/join"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
-        >
-          <JoinIcon className="h-5 w-5" />
-          Join Another Org
-        </Link>
-        <Link
-          href="/settings/notifications"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
-        >
-          <SettingsIcon className="h-5 w-5" />
-          Settings
-        </Link>
-        <form action="/auth/signout" method="POST">
+    <>
+      {/* Fixed Header - Mobile Only */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card border-b border-border">
+        <div className="flex items-center justify-between px-4 py-3">
+          {/* Hamburger Button */}
           <button
-            type="submit"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
+            onClick={() => setIsOpen(true)}
+            className="p-2 -ml-2 text-foreground hover:bg-muted rounded-xl transition-colors"
+            aria-label="Open menu"
           >
-            <LogOutIcon className="h-5 w-5" />
-            Sign Out
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
           </button>
-        </form>
-      </div>
-    </aside>
+
+          {/* Org Name */}
+          <Link href={basePath} className="flex items-center gap-2">
+            {organization.logo_url ? (
+              <div className="relative h-8 w-8 rounded-lg overflow-hidden">
+                <Image
+                  src={organization.logo_url}
+                  alt={organization.name}
+                  fill
+                  className="object-cover"
+                  sizes="32px"
+                />
+              </div>
+            ) : (
+              <div 
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+                style={{ backgroundColor: organization.primary_color || "var(--color-org-primary)" }}
+              >
+                {organization.name.charAt(0)}
+              </div>
+            )}
+            <span className="font-semibold text-foreground truncate max-w-[140px]">
+              {organization.name}
+            </span>
+          </Link>
+
+          {/* Placeholder for right side balance */}
+          <div className="w-10" />
+        </div>
+      </header>
+
+      {/* Spacer for fixed header */}
+      <div className="md:hidden h-14" />
+
+      {/* Overlay Backdrop */}
+      {isOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+          onClick={closeMenu}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Slide-in Sidebar */}
+      <aside
+        className={`md:hidden fixed top-0 left-0 bottom-0 z-50 w-72 bg-card border-r border-border transform transition-transform duration-300 ease-out ${
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Sidebar Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <Link href={basePath} className="flex items-center gap-3" onClick={closeMenu}>
+            {organization.logo_url ? (
+              <div className="relative h-10 w-10 rounded-xl overflow-hidden">
+                <Image
+                  src={organization.logo_url}
+                  alt={organization.name}
+                  fill
+                  className="object-cover"
+                  sizes="40px"
+                />
+              </div>
+            ) : (
+              <div 
+                className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                style={{ backgroundColor: organization.primary_color || "var(--color-org-primary)" }}
+              >
+                {organization.name.charAt(0)}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h2 className="font-semibold text-foreground truncate">{organization.name}</h2>
+              <p className="text-xs text-muted-foreground">TeamNetwork</p>
+            </div>
+          </Link>
+          <button
+            onClick={closeMenu}
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-xl transition-colors"
+            aria-label="Close menu"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto p-4">
+          <ul className="space-y-1">
+            {allNavItems.map((item) => {
+              const href = `${basePath}${item.href}`;
+              const isActive = pathname === href || (item.href !== "" && pathname.startsWith(href));
+              const Icon = item.icon;
+
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={href}
+                    onClick={closeMenu}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? "bg-org-primary text-white"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* User Section */}
+        <div className="p-4 border-t border-border space-y-1">
+          <Link
+            href="/app"
+            onClick={closeMenu}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
+          >
+            <SwitchIcon className="h-5 w-5" />
+            Switch Organization
+          </Link>
+          <Link
+            href="/app/join"
+            onClick={closeMenu}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
+          >
+            <JoinIcon className="h-5 w-5" />
+            Join Another Org
+          </Link>
+          <Link
+            href="/settings/notifications"
+            onClick={closeMenu}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
+          >
+            <SettingsIcon className="h-5 w-5" />
+            Settings
+          </Link>
+          <form action="/auth/signout" method="POST">
+            <button
+              type="submit"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
+            >
+              <LogOutIcon className="h-5 w-5" />
+              Sign Out
+            </button>
+          </form>
+        </div>
+      </aside>
+    </>
   );
 }
 
-// Icons (inline SVG components for simplicity)
+// Icons
 function HomeIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -239,3 +320,4 @@ function LogOutIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
