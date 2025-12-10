@@ -20,6 +20,25 @@ export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Temporary diagnostics to verify runtime env values (redacted)
+  try {
+    const priceEnv = getPriceIds("month", "none");
+    console.log("[create-org-checkout][diag]", {
+      secretKeyPrefix: process.env.STRIPE_SECRET_KEY?.slice(0, 10),
+      baseMonthly: process.env.STRIPE_PRICE_BASE_MONTHLY,
+      baseYearly: process.env.STRIPE_PRICE_BASE_YEARLY,
+      alumni_0_200_month: process.env.STRIPE_PRICE_ALUMNI_0_200_MONTHLY,
+      alumni_0_200_year: process.env.STRIPE_PRICE_ALUMNI_0_200_YEARLY,
+      alumni_201_600_month: process.env.STRIPE_PRICE_ALUMNI_201_600_MONTHLY,
+      alumni_201_600_year: process.env.STRIPE_PRICE_ALUMNI_201_600_YEARLY,
+      alumni_601_1500_month: process.env.STRIPE_PRICE_ALUMNI_601_1500_MONTHLY,
+      alumni_601_1500_year: process.env.STRIPE_PRICE_ALUMNI_601_1500_YEARLY,
+      samplePriceFromHelper: priceEnv.basePrice,
+    });
+  } catch (e) {
+    console.log("[create-org-checkout][diag] price helper failed", e);
+  }
+
   if (!user) {
     console.log("[create-org-checkout] Unauthorized - no user");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
