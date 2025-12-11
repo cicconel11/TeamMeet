@@ -31,15 +31,13 @@ export default function NewRecordPage() {
     const supabase = createClient();
 
     // Get organization ID
-    const { data: orgs, error: orgError } = await supabase
+    const { data: org } = await supabase
       .from("organizations")
       .select("id")
       .eq("slug", orgSlug)
-      .limit(1);
+      .single();
 
-    const org = orgs?.[0];
-
-    if (!org || orgError) {
+    if (!org) {
       setError("Organization not found");
       setIsLoading(false);
       return;
@@ -73,7 +71,7 @@ export default function NewRecordPage() {
         backHref={`/${orgSlug}/records`}
       />
 
-      <Card className="w-full max-w-2xl">
+      <Card className="max-w-2xl">
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">

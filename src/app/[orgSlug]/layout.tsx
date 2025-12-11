@@ -1,8 +1,6 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrgSidebar } from "@/components/layout/OrgSidebar";
-import { MobileNav } from "@/components/layout/MobileNav";
-import { BillingGate } from "@/components/layout/BillingGate";
 
 interface OrgLayoutProps {
   children: React.ReactNode;
@@ -13,69 +11,15 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   const { orgSlug } = await params;
   const supabase = await createClient();
 
-  // Get current user
-  const { data: { user } } = await supabase.auth.getUser();
-
-  // Must be authenticated to access org pages
-  if (!user) {
-    redirect(`/auth/login?redirect=/${orgSlug}`);
-  }
-
   // Fetch organization by slug
-  const { data: organizations, error: orgError } = await supabase
+  const { data: organization } = await supabase
     .from("organizations")
     .select("*")
     .eq("slug", orgSlug)
-    .limit(1);
-
-  const organization = organizations?.[0];
-
-  if (!organization || orgError) {
-    notFound();
-  }
-
-  // Check if user has a role in this organization
-  const { data: userRole } = await supabase
-    .from("user_organization_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("organization_id", organization.id)
     .single();
 
-  // If user doesn't have access to this org, redirect to /app
-  if (!userRole) {
-    redirect("/app");
-  }
-
-  const { data: subscription } = await supabase
-    .from("organization_subscriptions")
-    .select("status")
-    .eq("organization_id", organization.id)
-    .maybeSingle();
-
-  const isActive = subscription?.status === "active";
-
-  if (!isActive) {
-    if (userRole.role === "admin") {
-      return (
-        <BillingGate
-          orgSlug={orgSlug}
-          organizationId={organization.id}
-          status={subscription?.status || "pending"}
-        />
-      );
-    }
-
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4 sm:px-6">
-        <div className="max-w-md text-center space-y-4">
-          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Organization not active</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            This organization&apos;s subscription is not active yet. Please contact an admin.
-          </p>
-        </div>
-      </div>
-    );
+  if (!organization) {
+    notFound();
   }
 
   return (
@@ -92,16 +36,8 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
           : "#0f2a4f",
       } as React.CSSProperties}
     >
-      {/* Mobile: Hamburger menu navigation */}
-      <MobileNav organization={organization} userRole={userRole.role} />
-
-      {/* Desktop: Fixed sidebar */}
-      <div className="hidden md:block">
-        <OrgSidebar organization={organization} userRole={userRole.role} />
-      </div>
-
-      {/* Main content - full width on mobile, offset on desktop */}
-      <main className="md:ml-64 p-4 sm:p-6 md:p-8">
+      <OrgSidebar organization={organization} />
+      <main className="ml-64 p-8">
         {children}
       </main>
     </div>
@@ -124,3 +60,4 @@ function adjustColor(hex: string, amount: number): string {
   
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
+

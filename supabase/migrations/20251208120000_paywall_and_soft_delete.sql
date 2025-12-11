@@ -32,3 +32,4 @@ alter table if exists public.philanthropy_events add column if not exists delete
 alter table if exists public.notifications add column if not exists deleted_at timestamptz;
 
 
+

@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { checkIsOrgAdmin } from "@/lib/auth-client";
 import { Card, Button, Input, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 
@@ -13,7 +12,6 @@ export default function NewAlumniPage() {
   const orgSlug = params.orgSlug as string;
   
   const [isLoading, setIsLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
@@ -27,19 +25,6 @@ export default function NewAlumniPage() {
     notes: "",
   });
 
-  // Check admin status on mount
-  useEffect(() => {
-    const checkAdmin = async () => {
-      const isAdmin = await checkIsOrgAdmin(orgSlug);
-      if (!isAdmin) {
-        router.push(`/${orgSlug}/alumni`);
-        return;
-      }
-      setIsChecking(false);
-    };
-    checkAdmin();
-  }, [orgSlug, router]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -48,15 +33,13 @@ export default function NewAlumniPage() {
     const supabase = createClient();
 
     // Get organization ID
-    const { data: orgs, error: orgError } = await supabase
+    const { data: org } = await supabase
       .from("organizations")
       .select("id")
       .eq("slug", orgSlug)
-      .limit(1);
+      .single();
 
-    const org = orgs?.[0];
-
-    if (!org || orgError) {
+    if (!org) {
       setError("Organization not found");
       setIsLoading(false);
       return;
@@ -84,24 +67,15 @@ export default function NewAlumniPage() {
     router.refresh();
   };
 
-  if (isChecking) {
-    return (
-      <div className="animate-pulse">
-        <div className="h-8 w-48 bg-muted rounded-xl mb-4" />
-        <div className="h-4 w-64 bg-muted rounded-xl" />
-      </div>
-    );
-  }
-
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="Add New Alumni"
-        description="Add an alumni to your organization's network"
+        description="Add an alumni to your organization&apos;s network"
         backHref={`/${orgSlug}/alumni`}
       />
 
-      <Card className="w-full max-w-2xl">
+      <Card className="max-w-2xl">
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
             <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
@@ -187,3 +161,4 @@ export default function NewAlumniPage() {
     </div>
   );
 }
+

@@ -1,52 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { Organization } from "@/types/database";
 
 interface OrgSidebarProps {
   organization: Organization;
-  userRole: string;
 }
 
 const navItems = [
-  { href: "", label: "Dashboard", icon: HomeIcon, adminOnly: false },
-  { href: "/members", label: "Members", icon: UsersIcon, adminOnly: false },
-  { href: "/alumni", label: "Alumni", icon: GraduationCapIcon, adminOnly: false },
-  { href: "/events", label: "Events", icon: CalendarIcon, adminOnly: false },
-  { href: "/announcements", label: "Announcements", icon: MegaphoneIcon, adminOnly: false },
-  { href: "/philanthropy", label: "Philanthropy", icon: HeartIcon, adminOnly: false },
-  { href: "/records", label: "Records", icon: TrophyIcon, adminOnly: false },
-  { href: "/competitions/wagner-cup", label: "Wagner Cup", icon: AwardIcon, adminOnly: false },
-  { href: "/notifications", label: "Notifications", icon: BellIcon, adminOnly: true },
-  { href: "/settings/invites", label: "Invite Members", icon: InviteIcon, adminOnly: true },
+  { href: "", label: "Dashboard", icon: HomeIcon },
+  { href: "/members", label: "Members", icon: UsersIcon },
+  { href: "/alumni", label: "Alumni", icon: GraduationCapIcon },
+  { href: "/events", label: "Events", icon: CalendarIcon },
+  { href: "/announcements", label: "Announcements", icon: MegaphoneIcon },
+  { href: "/philanthropy", label: "Philanthropy", icon: HeartIcon },
+  { href: "/donations", label: "Donations", icon: DollarIcon },
+  { href: "/records", label: "Records", icon: TrophyIcon },
+  { href: "/competitions/wagner-cup", label: "Wagner Cup", icon: AwardIcon },
 ];
 
-export function OrgSidebar({ organization, userRole }: OrgSidebarProps) {
+export function OrgSidebar({ organization }: OrgSidebarProps) {
   const pathname = usePathname();
   const basePath = `/${organization.slug}`;
-  const isAdmin = userRole === "admin";
-
-  // Filter nav items based on user role
-  const visibleNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
-    <aside className="hidden md:flex fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex-col z-40">
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex flex-col z-40">
       {/* Logo/Org Header */}
       <div className="p-6 border-b border-border">
         <Link href={basePath} className="flex items-center gap-3">
           {organization.logo_url ? (
-            <div className="relative h-10 w-10 rounded-xl overflow-hidden">
-              <Image
-                src={organization.logo_url}
-                alt={organization.name}
-                fill
-                className="object-cover"
-                sizes="40px"
-                priority={false}
-              />
-            </div>
+            <img 
+              src={organization.logo_url} 
+              alt={organization.name} 
+              className="h-10 w-10 rounded-xl object-cover"
+            />
           ) : (
             <div 
               className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-lg"
@@ -65,7 +53,7 @@ export function OrgSidebar({ organization, userRole }: OrgSidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-4">
         <ul className="space-y-1">
-          {visibleNavItems.map((item) => {
+          {navItems.map((item) => {
             const href = `${basePath}${item.href}`;
             const isActive = pathname === href || (item.href !== "" && pathname.startsWith(href));
             const Icon = item.icon;
@@ -90,37 +78,14 @@ export function OrgSidebar({ organization, userRole }: OrgSidebarProps) {
       </nav>
 
       {/* User Section */}
-      <div className="p-4 border-t border-border space-y-1">
+      <div className="p-4 border-t border-border">
         <Link
-          href="/app"
+          href="/auth/signout"
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
         >
-          <SwitchIcon className="h-5 w-5" />
-          Switch Organization
+          <LogOutIcon className="h-5 w-5" />
+          Sign Out
         </Link>
-        <Link
-          href="/app/join"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
-        >
-          <JoinIcon className="h-5 w-5" />
-          Join Another Org
-        </Link>
-        <Link
-          href="/settings/notifications"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
-        >
-          <SettingsIcon className="h-5 w-5" />
-          Settings
-        </Link>
-        <form action="/auth/signout" method="POST">
-          <button
-            type="submit"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
-          >
-            <LogOutIcon className="h-5 w-5" />
-            Sign Out
-          </button>
-        </form>
       </div>
     </aside>
   );
@@ -175,6 +140,14 @@ function HeartIcon({ className }: { className?: string }) {
   );
 }
 
+function DollarIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
 function TrophyIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -191,47 +164,6 @@ function AwardIcon({ className }: { className?: string }) {
   );
 }
 
-function BellIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-    </svg>
-  );
-}
-
-function InviteIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
-    </svg>
-  );
-}
-
-function SwitchIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-    </svg>
-  );
-}
-
-function JoinIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-    </svg>
-  );
-}
-
-function SettingsIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  );
-}
-
 function LogOutIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -239,3 +171,4 @@ function LogOutIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+

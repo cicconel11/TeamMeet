@@ -168,7 +168,12 @@ export async function POST(req: Request) {
     console.log("[create-org-checkout] Success! Checkout URL:", session.url);
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[create-org-checkout] Error:", error);
+    const err = error as { type?: string; code?: string; message?: string };
+    console.error("[create-org-checkout] Error", {
+      type: err?.type,
+      code: err?.code,
+      message: err?.message || (error instanceof Error ? error.message : String(error)),
+    });
     if (organizationId) {
       // Best-effort cleanup on failure
       await supabase.from("organization_subscriptions").delete().eq("organization_id", organizationId);
@@ -179,5 +184,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
-
 

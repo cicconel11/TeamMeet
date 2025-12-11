@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Card, Badge, Button, EmptyState, SoftDeleteButton } from "@/components/ui";
+import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { isOrgAdmin } from "@/lib/auth";
 
@@ -15,15 +15,13 @@ export default async function RecordsPage({ params, searchParams }: RecordsPageP
   const supabase = await createClient();
 
   // Fetch organization
-  const { data: orgs, error: orgError } = await supabase
+  const { data: org } = await supabase
     .from("organizations")
     .select("*")
     .eq("slug", orgSlug)
-    .limit(1);
+    .single();
 
-  const org = orgs?.[0];
-
-  if (!org || orgError) return null;
+  if (!org) return null;
 
   const isAdmin = await isOrgAdmin(org.id);
 
@@ -32,7 +30,6 @@ export default async function RecordsPage({ params, searchParams }: RecordsPageP
     .from("records")
     .select("*")
     .eq("organization_id", org.id)
-    .is("deleted_at", null)
     .order("category")
     .order("title");
 
@@ -46,19 +43,17 @@ export default async function RecordsPage({ params, searchParams }: RecordsPageP
   const { data: allRecords } = await supabase
     .from("records")
     .select("category")
-    .eq("organization_id", org.id)
-    .is("deleted_at", null);
+    .eq("organization_id", org.id);
   
   const categories = [...new Set(allRecords?.map((r) => r.category).filter(Boolean))];
 
   // Group records by category
-  type RecordItem = NonNullable<typeof records>[number];
   const recordsByCategory = records?.reduce((acc, record) => {
     const category = record.category || "General";
     if (!acc[category]) acc[category] = [];
     acc[category].push(record);
     return acc;
-  }, {} as Record<string, RecordItem[]>) || {};
+  }, {} as Record<string, typeof records>) || {};
 
   return (
     <div className="animate-fade-in">
@@ -111,7 +106,7 @@ export default async function RecordsPage({ params, searchParams }: RecordsPageP
       {/* Records by Category */}
       {records && records.length > 0 ? (
         <div className="space-y-8 stagger-children">
-          {(Object.entries(recordsByCategory) as [string, RecordItem[]][]).map(([category, categoryRecords]) => (
+          {Object.entries(recordsByCategory).map(([category, categoryRecords]) => (
             <div key={category}>
               <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                 <svg className="h-5 w-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
@@ -119,7 +114,7 @@ export default async function RecordsPage({ params, searchParams }: RecordsPageP
                 </svg>
                 {category}
               </h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {categoryRecords?.map((record) => (
                   <Card key={record.id} className="p-5">
                     <div className="flex items-start justify-between gap-4">
@@ -136,16 +131,6 @@ export default async function RecordsPage({ params, searchParams }: RecordsPageP
                       {record.year && (
                         <Badge variant="muted">{record.year}</Badge>
                       )}
-                  {isAdmin && (
-                    <SoftDeleteButton
-                      table="records"
-                      id={record.id}
-                      organizationField="organization_id"
-                      organizationId={org.id}
-                      redirectTo={`/${orgSlug}/records`}
-                      label="Delete"
-                    />
-                  )}
                     </div>
                     {record.notes && (
                       <p className="text-sm text-muted-foreground mt-3 pt-3 border-t border-border">
