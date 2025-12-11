@@ -6,37 +6,12 @@ const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
 const supabaseAnonKey = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
 
 // Routes that don't require authentication
-const publicRoutes = [
-  "/",
-  "/auth/login",
-  "/auth/signup",
-  "/auth/callback",
-  "/auth/error",
-  "/auth/signout",
-  "/terms",
-];
+const publicRoutes = ["/", "/auth/login", "/auth/signup", "/auth/callback", "/auth/error", "/auth/signout"];
 
 // Routes that should redirect to /app if user is already authenticated
 const authOnlyRoutes = ["/", "/auth/login", "/auth/signup"];
 
 export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
-  const host = request.headers.get("host");
-
-  // 1) Bypass Stripe webhook so middleware does not block it
-  if (pathname === "/api/stripe/webhook") {
-    return NextResponse.next();
-  }
-
-  // 2) Canonical host redirect: bare -> www
-  if (host === "myteamnetwork.com") {
-    const url = request.nextUrl.clone();
-    url.protocol = "https:";
-    url.host = "www.myteamnetwork.com";
-    return NextResponse.redirect(url, { status: 308 });
-  }
-
-  // 3) Old, known-good Supabase SSR cookie adapter
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -49,35 +24,51 @@ export async function middleware(request: NextRequest) {
         return request.cookies.get(name)?.value;
       },
       set(name: string, value: string, options: CookieOptions) {
-        request.cookies.set({ name, value, ...options });
+        request.cookies.set({
+          name,
+          value,
+          ...options,
+        });
         response = NextResponse.next({
           request: {
             headers: request.headers,
           },
         });
-        response.cookies.set({ name, value, ...options });
+        response.cookies.set({
+          name,
+          value,
+          ...options,
+        });
       },
       remove(name: string, options: CookieOptions) {
-        request.cookies.set({ name, value: "", ...options });
+        request.cookies.set({
+          name,
+          value: "",
+          ...options,
+        });
         response = NextResponse.next({
           request: {
             headers: request.headers,
           },
         });
-        response.cookies.set({ name, value: "", ...options });
+        response.cookies.set({
+          name,
+          value: "",
+          ...options,
+        });
       },
     },
   });
 
-  // Refresh session if it exists (this is the old working behavior)
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh session if it exists
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Public route?
-  const isPublicRoute =
-    publicRoutes.some((route) => pathname === route) ||
-    pathname.startsWith("/auth/");
+  const pathname = request.nextUrl.pathname;
+
+  // Check if this is a public route
+  const isPublicRoute = publicRoutes.some(route => 
+    pathname === route || pathname.startsWith("/auth/")
+  );
 
   // If user is authenticated and on an auth-only route, redirect to /app
   if (user && authOnlyRoutes.includes(pathname)) {
@@ -96,10 +87,12 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all request paths except for the ones starting with:
-    // - _next/static (static files)
-    // - _next/image (image optimization files)
-    // - favicon.ico (favicon file)
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
