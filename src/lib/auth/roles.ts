@@ -28,7 +28,7 @@ export async function getOrgRole(params: { orgId: string; userId?: string }): Pr
     .maybeSingle();
 
   const role = normalizeRole((data?.role as UserRole | null) ?? null);
-  const status = (data?.status as MembershipStatus | null) ?? null;
+  const status = (data?.status as MembershipStatus | null) ?? "active";
 
   return { role, status, userId: uid };
 }

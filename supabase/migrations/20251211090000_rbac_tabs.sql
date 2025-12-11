@@ -13,8 +13,13 @@ update public.user_organization_roles
   set role = 'alumni'
   where role = 'viewer';
 
--- Membership status for revocation
-create type if not exists public.membership_status as enum ('active', 'revoked');
+-- Membership status for revocation (idempotent)
+do $$
+begin
+  create type public.membership_status as enum ('active', 'revoked');
+exception
+  when duplicate_object then null;
+end $$;
 
 alter table if exists public.user_organization_roles
   add column if not exists status public.membership_status not null default 'active';
@@ -155,7 +160,8 @@ alter table public.competition_teams enable row level security;
 alter table public.competition_points enable row level security;
 
 -- Mentorship pairs policies
-create policy if not exists mentorship_pairs_select
+drop policy if exists mentorship_pairs_select on public.mentorship_pairs;
+create policy mentorship_pairs_select
   on public.mentorship_pairs
   for select using (
     has_active_role(organization_id, array['admin','active_member','alumni'])
@@ -166,21 +172,25 @@ create policy if not exists mentorship_pairs_select
     )
   );
 
-create policy if not exists mentorship_pairs_insert
+drop policy if exists mentorship_pairs_insert on public.mentorship_pairs;
+create policy mentorship_pairs_insert
   on public.mentorship_pairs
   for insert with check (has_active_role(organization_id, array['admin']));
 
-create policy if not exists mentorship_pairs_update
+drop policy if exists mentorship_pairs_update on public.mentorship_pairs;
+create policy mentorship_pairs_update
   on public.mentorship_pairs
   for update using (has_active_role(organization_id, array['admin']))
   with check (has_active_role(organization_id, array['admin']));
 
-create policy if not exists mentorship_pairs_delete
+drop policy if exists mentorship_pairs_delete on public.mentorship_pairs;
+create policy mentorship_pairs_delete
   on public.mentorship_pairs
   for delete using (has_active_role(organization_id, array['admin']));
 
 -- Mentorship logs policies
-create policy if not exists mentorship_logs_select
+drop policy if exists mentorship_logs_select on public.mentorship_logs;
+create policy mentorship_logs_select
   on public.mentorship_logs
   for select using (
     exists (
@@ -197,7 +207,8 @@ create policy if not exists mentorship_logs_select
     )
   );
 
-create policy if not exists mentorship_logs_insert
+drop policy if exists mentorship_logs_insert on public.mentorship_logs;
+create policy mentorship_logs_insert
   on public.mentorship_logs
   for insert with check (
     exists (
@@ -213,7 +224,8 @@ create policy if not exists mentorship_logs_insert
     and created_by = auth.uid()
   );
 
-create policy if not exists mentorship_logs_update
+drop policy if exists mentorship_logs_update on public.mentorship_logs;
+create policy mentorship_logs_update
   on public.mentorship_logs
   for update using (
     exists (
@@ -229,30 +241,36 @@ create policy if not exists mentorship_logs_update
   )
   with check (true);
 
-create policy if not exists mentorship_logs_delete
+drop policy if exists mentorship_logs_delete on public.mentorship_logs;
+create policy mentorship_logs_delete
   on public.mentorship_logs
   for delete using (has_active_role(organization_id, array['admin']));
 
 -- Workouts policies
-create policy if not exists workouts_select
+drop policy if exists workouts_select on public.workouts;
+create policy workouts_select
   on public.workouts
   for select using (has_active_role(organization_id, array['admin','active_member','alumni']));
 
-create policy if not exists workouts_insert
+drop policy if exists workouts_insert on public.workouts;
+create policy workouts_insert
   on public.workouts
   for insert with check (has_active_role(organization_id, array['admin']));
 
-create policy if not exists workouts_update
+drop policy if exists workouts_update on public.workouts;
+create policy workouts_update
   on public.workouts
   for update using (has_active_role(organization_id, array['admin']))
   with check (has_active_role(organization_id, array['admin']));
 
-create policy if not exists workouts_delete
+drop policy if exists workouts_delete on public.workouts;
+create policy workouts_delete
   on public.workouts
   for delete using (has_active_role(organization_id, array['admin']));
 
 -- Workout logs policies
-create policy if not exists workout_logs_select
+drop policy if exists workout_logs_select on public.workout_logs;
+create policy workout_logs_select
   on public.workout_logs
   for select using (
     has_active_role(organization_id, array['admin','active_member','alumni'])
@@ -262,14 +280,16 @@ create policy if not exists workout_logs_select
     )
   );
 
-create policy if not exists workout_logs_insert
+drop policy if exists workout_logs_insert on public.workout_logs;
+create policy workout_logs_insert
   on public.workout_logs
   for insert with check (
     has_active_role(organization_id, array['admin'])
     or (has_active_role(organization_id, array['active_member']) and user_id = auth.uid())
   );
 
-create policy if not exists workout_logs_update
+drop policy if exists workout_logs_update on public.workout_logs;
+create policy workout_logs_update
   on public.workout_logs
   for update using (
     has_active_role(organization_id, array['admin'])
@@ -280,43 +300,52 @@ create policy if not exists workout_logs_update
     or user_id = auth.uid()
   );
 
-create policy if not exists workout_logs_delete
+drop policy if exists workout_logs_delete on public.workout_logs;
+create policy workout_logs_delete
   on public.workout_logs
   for delete using (has_active_role(organization_id, array['admin']));
 
 -- Competition teams policies
-create policy if not exists competition_teams_select
+drop policy if exists competition_teams_select on public.competition_teams;
+create policy competition_teams_select
   on public.competition_teams
   for select using (has_active_role(organization_id, array['admin','active_member','alumni']));
 
-create policy if not exists competition_teams_insert
+drop policy if exists competition_teams_insert on public.competition_teams;
+create policy competition_teams_insert
   on public.competition_teams
   for insert with check (has_active_role(organization_id, array['admin']));
 
-create policy if not exists competition_teams_update
+drop policy if exists competition_teams_update on public.competition_teams;
+create policy competition_teams_update
   on public.competition_teams
   for update using (has_active_role(organization_id, array['admin']))
   with check (has_active_role(organization_id, array['admin']));
 
-create policy if not exists competition_teams_delete
+drop policy if exists competition_teams_delete on public.competition_teams;
+create policy competition_teams_delete
   on public.competition_teams
   for delete using (has_active_role(organization_id, array['admin']));
 
 -- Competition points policies
-create policy if not exists competition_points_select
+drop policy if exists competition_points_select on public.competition_points;
+create policy competition_points_select
   on public.competition_points
   for select using (has_active_role(coalesce(organization_id, (select c.organization_id from public.competitions c where c.id = competition_id)), array['admin','active_member','alumni']));
 
-create policy if not exists competition_points_insert
+drop policy if exists competition_points_insert on public.competition_points;
+create policy competition_points_insert
   on public.competition_points
   for insert with check (has_active_role(coalesce(organization_id, (select c.organization_id from public.competitions c where c.id = competition_id)), array['admin']));
 
-create policy if not exists competition_points_update
+drop policy if exists competition_points_update on public.competition_points;
+create policy competition_points_update
   on public.competition_points
   for update using (has_active_role(coalesce(organization_id, (select c.organization_id from public.competitions c where c.id = competition_id)), array['admin']))
   with check (has_active_role(coalesce(organization_id, (select c.organization_id from public.competitions c where c.id = competition_id)), array['admin']));
 
-create policy if not exists competition_points_delete
+drop policy if exists competition_points_delete on public.competition_points;
+create policy competition_points_delete
   on public.competition_points
   for delete using (has_active_role(coalesce(organization_id, (select c.organization_id from public.competitions c where c.id = competition_id)), array['admin']));
 
