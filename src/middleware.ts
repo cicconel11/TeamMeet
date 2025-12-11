@@ -55,7 +55,23 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getSession();
 
   const user = session?.user ?? null;
+  const hasAuthCookies = request.cookies
+    .getAll()
+    .some((c) => c.name.includes("auth-token"));
   const pathname = request.nextUrl.pathname;
+
+  // Optional detailed logging (enable by setting NEXT_PUBLIC_LOG_AUTH=true)
+  if (process.env.NEXT_PUBLIC_LOG_AUTH === "true") {
+    const sbCookies = request.cookies.getAll().map((c) => c.name).filter((n) => n.startsWith("sb-"));
+    console.log("[middleware:session]", {
+      host,
+      pathname,
+      cookies: sbCookies,
+      sessionUser: user ? user.id.slice(0, 8) : null,
+      sessionNull: !session,
+      authError: authError?.message || null,
+    });
+  }
 
   // Debug logging for non-static routes
   if (!pathname.startsWith("/_next") && !pathname.match(/\.(svg|png|jpg|jpeg|gif|webp|ico)$/)) {
@@ -97,6 +113,11 @@ export async function middleware(request: NextRequest) {
 
   // If user is not authenticated and trying to access a protected route
   if (!user) {
+    // If we have Supabase auth cookies but getSession() returned null (e.g., parsing/refresh hiccup),
+    // allow the request to continue so server components can validate later.
+    if (hasAuthCookies) {
+      return supabaseResponse;
+    }
     console.log("[middleware] Redirecting to login, no user found for:", pathname);
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
