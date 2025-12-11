@@ -168,18 +168,31 @@ export async function POST(req: Request) {
     console.log("[create-org-checkout] Success! Checkout URL:", session.url);
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    const err = error as { type?: string; code?: string; message?: string };
-    console.error("[create-org-checkout] Error", {
-      type: err?.type,
-      code: err?.code,
-      message: err?.message || (error instanceof Error ? error.message : String(error)),
+    // Enhanced Stripe error logging
+    const stripeErr = error as {
+      type?: string;
+      code?: string;
+      message?: string;
+      param?: string;
+      statusCode?: number;
+      raw?: { message?: string };
+    };
+    console.error("[create-org-checkout] Error details:", {
+      type: stripeErr?.type,
+      code: stripeErr?.code,
+      param: stripeErr?.param,
+      statusCode: stripeErr?.statusCode,
+      message: stripeErr?.message || stripeErr?.raw?.message || (error instanceof Error ? error.message : String(error)),
     });
+    
     if (organizationId) {
       // Best-effort cleanup on failure
+      console.log("[create-org-checkout] Cleaning up org:", organizationId);
       await supabase.from("organization_subscriptions").delete().eq("organization_id", organizationId);
       await supabase.from("user_organization_roles").delete().eq("organization_id", organizationId).eq("user_id", user.id);
       await supabase.from("organizations").delete().eq("id", organizationId);
     }
+    
     const message = error instanceof Error ? error.message : "Unable to start checkout";
     return NextResponse.json({ error: message }, { status: 400 });
   }

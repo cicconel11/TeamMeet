@@ -12,8 +12,11 @@ export const runtime = "nodejs";
 const webhookSecret = requireEnv("STRIPE_WEBHOOK_SECRET");
 
 export async function POST(req: Request) {
+  console.log("[stripe-webhook] Received request");
+  
   const signature = req.headers.get("stripe-signature");
   if (!signature) {
+    console.log("[stripe-webhook] Missing stripe-signature header");
     return NextResponse.json({ error: "Missing webhook secret" }, { status: 400 });
   }
 
@@ -22,8 +25,10 @@ export async function POST(req: Request) {
 
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    console.log("[stripe-webhook] Event received:", event.type, event.id);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid signature";
+    console.error("[stripe-webhook] Signature verification failed:", message);
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
