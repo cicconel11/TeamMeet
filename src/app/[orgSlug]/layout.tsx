@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { OrgSidebar } from "@/components/layout/OrgSidebar";
 import { getOrgContext } from "@/lib/auth/roles";
 
@@ -15,7 +16,12 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   if (!orgContext.organization) notFound();
 
   if (!orgContext.userId) {
-    redirect(`/auth/login?redirect=/${orgSlug}`);
+    const cookieStore = await cookies();
+    const hasSbCookies = cookieStore.getAll().some((c) => c.name.startsWith("sb-"));
+    if (!hasSbCookies) {
+      redirect(`/auth/login?redirect=/${orgSlug}`);
+    }
+    // Allow render to continue to avoid redirect loop while session refreshes
   }
 
   if (orgContext.status === "revoked") {

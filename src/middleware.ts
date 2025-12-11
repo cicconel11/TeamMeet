@@ -48,10 +48,19 @@ export async function middleware(request: NextRequest) {
   // getSession() reads the JWT from cookies locally without server validation,
   // which is sufficient for route protection. Server components that need
   // verified user data can still call getUser().
-  const {
-    data: { session },
-    error: authError,
-  } = await supabase.auth.getSession();
+  // Test mode: allows middleware unit tests without hitting Supabase
+  const isTestMode = process.env.AUTH_TEST_MODE === "true";
+  let session = null;
+  let authError: Error | null = null;
+  if (isTestMode) {
+    session = hasAuthCookies
+      ? { user: { id: "test-user" } as { id: string } }
+      : null;
+  } else {
+    const res = await supabase.auth.getSession();
+    session = res.data.session;
+    authError = res.error;
+  }
 
   const user = session?.user ?? null;
   const hasAuthCookies = request.cookies
@@ -71,6 +80,14 @@ export async function middleware(request: NextRequest) {
       sessionNull: !session,
       authError: authError?.message || null,
     });
+    if (pathname.startsWith("/testing123")) {
+      console.log("[AUTH-MW-testing123]", {
+        pathname,
+        sbCookies,
+        sessionPresent: !!session,
+        authError: authError?.message || null,
+      });
+    }
   }
 
   // Check if this is a public route
