@@ -3,13 +3,14 @@ import type { UserRole } from "@/types/database";
 
 export async function getCurrentUser() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user ?? null;
 }
 
 export async function getUserProfile() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   
   if (!user) return null;
 
@@ -24,7 +25,8 @@ export async function getUserProfile() {
 
 export async function getUserRoleForOrg(organizationId: string): Promise<UserRole | null> {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   
   if (!user) return null;
 
