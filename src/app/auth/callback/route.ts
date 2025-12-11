@@ -1,11 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const redirect = searchParams.get("redirect") || "/app";
@@ -21,22 +21,20 @@ export async function GET(request: Request) {
   }
 
   if (code) {
-    const cookieStore = await cookies();
+    // Create response first - cookies will be set on this response
+    const redirectUrl = `${origin}${redirect}`;
+    const response = NextResponse.redirect(redirectUrl);
     
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          console.log("[auth/callback] Setting cookies:", cookiesToSet.map(c => c.name));
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch (e) {
-            console.error("[auth/callback] Cookie set error:", e);
-          }
+          console.log("[auth/callback] Setting cookies on response:", cookiesToSet.map(c => c.name));
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
         },
       },
     });
@@ -46,8 +44,8 @@ export async function GET(request: Request) {
     
     if (!error && data.session) {
       console.log("[auth/callback] Session created for user:", data.session.user.id, data.session.user.email);
-      console.log("[auth/callback] Cookies after exchange:", cookieStore.getAll().map(c => c.name));
-      return NextResponse.redirect(`${origin}${redirect}`);
+      console.log("[auth/callback] Response cookies:", response.cookies.getAll().map(c => c.name));
+      return response;
     }
     
     console.error("[auth/callback] Exchange failed - Error:", error?.message, "Has session:", !!data?.session);
