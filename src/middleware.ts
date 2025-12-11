@@ -48,6 +48,11 @@ export async function middleware(request: NextRequest) {
   // getSession() reads the JWT from cookies locally without server validation,
   // which is sufficient for route protection. Server components that need
   // verified user data can still call getUser().
+  const hasAuthCookies = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") || c.name.includes("auth-token"));
+  const pathname = request.nextUrl.pathname;
+
   // Test mode: allows middleware unit tests without hitting Supabase
   const isTestMode = process.env.AUTH_TEST_MODE === "true";
   let session = null;
@@ -63,10 +68,6 @@ export async function middleware(request: NextRequest) {
   }
 
   const user = session?.user ?? null;
-  const hasAuthCookies = request.cookies
-    .getAll()
-    .some((c) => c.name.startsWith("sb-") || c.name.includes("auth-token"));
-  const pathname = request.nextUrl.pathname;
 
   const shouldLog = process.env.NEXT_PUBLIC_LOG_AUTH === "true";
   const sbCookies = request.cookies.getAll().map((c) => c.name).filter((n) => n.startsWith("sb-"));
