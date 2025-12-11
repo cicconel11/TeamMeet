@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function HomePage() {
@@ -50,11 +51,15 @@ export default async function HomePage() {
             >
               <div className="flex items-center gap-4 mb-4">
                 {org.logo_url ? (
-                  <img
-                    src={org.logo_url}
-                    alt={org.name}
-                    className="h-14 w-14 rounded-xl object-cover"
-                  />
+                  <div className="relative h-14 w-14 rounded-xl overflow-hidden">
+                    <Image
+                      src={org.logo_url}
+                      alt={org.name}
+                      fill
+                      className="object-cover"
+                      sizes="56px"
+                    />
+                  </div>
                 ) : (
                   <div
                     className="h-14 w-14 rounded-xl flex items-center justify-center text-white font-bold text-xl"

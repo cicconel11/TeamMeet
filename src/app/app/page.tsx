@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Button, Badge, EmptyState } from "@/components/ui";
@@ -95,8 +96,14 @@ export default async function AppHomePage() {
                 <Card interactive className="p-5 space-y-3">
                   <div className="flex items-center gap-3">
                     {org.logo_url ? (
-                      <div className="h-12 w-12 rounded-xl overflow-hidden bg-muted">
-                        <img src={org.logo_url} alt={org.name} className="h-full w-full object-cover" />
+                      <div className="relative h-12 w-12 rounded-xl overflow-hidden bg-muted">
+                        <Image
+                          src={org.logo_url}
+                          alt={org.name}
+                          fill
+                          className="object-cover"
+                          sizes="48px"
+                        />
                       </div>
                     ) : (
                       <div
