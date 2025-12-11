@@ -60,20 +60,28 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Refresh session if it exists
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
   const pathname = request.nextUrl.pathname;
   
-  // Debug: log auth state for protected routes
-  if (!pathname.startsWith("/auth") && !pathname.startsWith("/api") && pathname !== "/") {
-    console.log("[middleware]", pathname, user ? `user:${user.id.slice(0,8)}` : "no-user", authError?.message || "");
-  }
-
-  // Check if this is a public route
+  // Check if this is a public route first (before any async operations)
   const isPublicRoute = publicRoutes.some(route => 
     pathname === route || pathname.startsWith("/auth/")
   );
+
+  // For public routes, just pass through without checking auth
+  if (isPublicRoute) {
+    return response;
+  }
+
+  // Refresh session - use getSession() which reads from JWT cookie (faster, no network request)
+  // Then call getUser() only if we have a session to validate it
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  
+  // Debug: log auth state for protected routes
+  if (!pathname.startsWith("/api")) {
+    console.log("[middleware]", pathname, session?.user ? `user:${session.user.id.slice(0,8)}` : "no-session", sessionError?.message || "");
+  }
+
+  const user = session?.user;
 
   // If user is authenticated and on an auth-only route, redirect to /app
   if (user && authOnlyRoutes.includes(pathname)) {
@@ -81,7 +89,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // If user is not authenticated and trying to access a protected route
-  if (!user && !isPublicRoute) {
+  if (!user) {
     const redirectUrl = new URL("/auth/login", request.url);
     redirectUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(redirectUrl);
