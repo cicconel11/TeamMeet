@@ -11,6 +11,15 @@ const publicRoutes = ["/", "/auth/login", "/auth/signup", "/auth/callback", "/au
 const authOnlyRoutes = ["/", "/auth/login", "/auth/signup"];
 
 export async function middleware(request: NextRequest) {
+  // Canonical host redirect: ensure cookies stay scoped to www domain
+  const host = request.headers.get("host");
+  if (host === "myteamnetwork.com") {
+    const url = request.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = "www.myteamnetwork.com";
+    return NextResponse.redirect(url, { status: 308 });
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
