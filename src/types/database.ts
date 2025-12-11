@@ -4,6 +4,8 @@
 export type UserRole = "admin" | "member" | "viewer";
 export type MemberStatus = "active" | "inactive";
 export type EventType = "general" | "philanthropy" | "game" | "meeting" | "social" | "fundraiser";
+export type NotificationChannel = "email" | "sms" | "both";
+export type NotificationAudience = "members" | "alumni" | "all";
 
 export interface Organization {
   id: string;
@@ -159,6 +161,29 @@ export interface PhilanthropyEvent {
   created_at: string;
 }
 
+export interface Notification {
+  id: string;
+  organization_id: string;
+  title: string;
+  body: string | null;
+  channel: NotificationChannel;
+  audience: NotificationAudience;
+  sent_at: string | null;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+export interface NotificationPreference {
+  id: string;
+  user_id: string;
+  email_enabled: boolean;
+  email_address: string | null;
+  sms_enabled: boolean;
+  phone_number: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Supabase Database type for typed client
 export interface Database {
   public: {
@@ -227,6 +252,16 @@ export interface Database {
         Row: PhilanthropyEvent;
         Insert: Omit<PhilanthropyEvent, "id" | "created_at">;
         Update: Partial<Omit<PhilanthropyEvent, "id" | "created_at">>;
+      };
+      notifications: {
+        Row: Notification;
+        Insert: Omit<Notification, "id" | "created_at">;
+        Update: Partial<Omit<Notification, "id" | "created_at">>;
+      };
+      notification_preferences: {
+        Row: NotificationPreference;
+        Insert: Omit<NotificationPreference, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<NotificationPreference, "id" | "created_at">>;
       };
     };
     Enums: {
