@@ -130,6 +130,23 @@ export interface CompetitionPoint {
   created_at: string;
 }
 
+export type SubscriptionInterval = "month" | "year";
+export type AlumniBucket = "none" | "0-200" | "201-600" | "601-1500" | "1500+";
+
+export interface OrganizationSubscription {
+  id: string;
+  organization_id: string;
+  stripe_subscription_id: string | null;
+  stripe_customer_id: string | null;
+  status: string | null;
+  base_plan_interval: SubscriptionInterval | null;
+  alumni_bucket: AlumniBucket | null;
+  alumni_plan_interval: SubscriptionInterval | null;
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
 export interface PhilanthropyEvent {
   id: string;
   organization_id: string;
@@ -200,6 +217,11 @@ export interface Database {
         Row: CompetitionPoint;
         Insert: Omit<CompetitionPoint, "id" | "created_at">;
         Update: Partial<Omit<CompetitionPoint, "id" | "created_at">>;
+      };
+      organization_subscriptions: {
+        Row: OrganizationSubscription;
+        Insert: Omit<OrganizationSubscription, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<OrganizationSubscription, "id">>;
       };
       philanthropy_events: {
         Row: PhilanthropyEvent;
