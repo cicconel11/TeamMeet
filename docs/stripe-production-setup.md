@@ -82,3 +82,4 @@ There are currently **two LIVE webhook destinations** pointing at `https://www.m
    - You're redirected to Stripe Checkout (live mode)
    - After completing payment, webhook events appear in Stripe → Developers → Event destinations
 
+
