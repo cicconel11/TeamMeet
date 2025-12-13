@@ -1,19 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, Button, Input, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
+import type { Alumni } from "@/types/database";
 
-export default function NewAlumniPage() {
+export default function EditAlumniPage() {
   const router = useRouter();
   const params = useParams();
   const orgSlug = params.orgSlug as string;
-  
+  const alumniId = params.alumniId as string;
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -30,6 +33,59 @@ export default function NewAlumniPage() {
     current_city: "",
     position_title: "",
   });
+
+  useEffect(() => {
+    const fetchAlumni = async () => {
+      const supabase = createClient();
+
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("slug", orgSlug)
+        .single();
+
+      if (!org) {
+        setError("Organization not found");
+        setIsFetching(false);
+        return;
+      }
+
+      const { data: alumni } = await supabase
+        .from("alumni")
+        .select("*")
+        .eq("id", alumniId)
+        .eq("organization_id", org.id)
+        .is("deleted_at", null)
+        .single();
+
+      if (!alumni) {
+        setError("Alumni not found");
+        setIsFetching(false);
+        return;
+      }
+
+      const alum = alumni as Alumni;
+      setFormData({
+        first_name: alum.first_name || "",
+        last_name: alum.last_name || "",
+        email: alum.email || "",
+        graduation_year: alum.graduation_year?.toString() || "",
+        major: alum.major || "",
+        job_title: alum.job_title || "",
+        photo_url: alum.photo_url || "",
+        notes: alum.notes || "",
+        linkedin_url: alum.linkedin_url || "",
+        phone_number: alum.phone_number || "",
+        industry: alum.industry || "",
+        current_company: alum.current_company || "",
+        current_city: alum.current_city || "",
+        position_title: alum.position_title || "",
+      });
+      setIsFetching(false);
+    };
+
+    fetchAlumni();
+  }, [orgSlug, alumniId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +108,6 @@ export default function NewAlumniPage() {
 
     const supabase = createClient();
 
-    // Get organization ID
     const { data: org } = await supabase
       .from("organizations")
       .select("id")
@@ -65,40 +120,63 @@ export default function NewAlumniPage() {
       return;
     }
 
-    const { error: insertError } = await supabase.from("alumni").insert({
-      organization_id: org.id,
-      first_name: formData.first_name,
-      last_name: formData.last_name,
-      email: formData.email || null,
-      graduation_year: formData.graduation_year ? parseInt(formData.graduation_year) : null,
-      major: formData.major || null,
-      job_title: formData.job_title || null,
-      photo_url: formData.photo_url || null,
-      notes: formData.notes || null,
-      linkedin_url: linkedin || null,
-      phone_number: formData.phone_number || null,
-      industry: formData.industry || null,
-      current_company: formData.current_company || null,
-      current_city: formData.current_city || null,
-      position_title: formData.position_title || null,
-    });
+    const { error: updateError } = await supabase
+      .from("alumni")
+      .update({
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email || null,
+        graduation_year: formData.graduation_year ? parseInt(formData.graduation_year) : null,
+        major: formData.major || null,
+        job_title: formData.job_title || null,
+        photo_url: formData.photo_url || null,
+        notes: formData.notes || null,
+        linkedin_url: linkedin || null,
+        phone_number: formData.phone_number || null,
+        industry: formData.industry || null,
+        current_company: formData.current_company || null,
+        current_city: formData.current_city || null,
+        position_title: formData.position_title || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", alumniId)
+      .eq("organization_id", org.id);
 
-    if (insertError) {
-      setError(insertError.message);
+    if (updateError) {
+      setError(updateError.message);
       setIsLoading(false);
       return;
     }
 
-    router.push(`/${orgSlug}/alumni`);
+    router.push(`/${orgSlug}/alumni/${alumniId}`);
     router.refresh();
   };
+
+  if (isFetching) {
+    return (
+      <div className="animate-fade-in">
+        <PageHeader
+          title="Edit Alumni"
+          description="Loading..."
+          backHref={`/${orgSlug}/alumni/${alumniId}`}
+        />
+        <Card className="max-w-2xl p-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 bg-muted rounded-xl" />
+            <div className="h-10 bg-muted rounded-xl" />
+            <div className="h-10 bg-muted rounded-xl" />
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
       <PageHeader
-        title="Add New Alumni"
-        description="Add an alumni to your organization&apos;s network"
-        backHref={`/${orgSlug}/alumni`}
+        title="Edit Alumni"
+        description="Update alumni information"
+        backHref={`/${orgSlug}/alumni/${alumniId}`}
       />
 
       <Card className="max-w-2xl">
@@ -227,7 +305,7 @@ export default function NewAlumniPage() {
               Cancel
             </Button>
             <Button type="submit" isLoading={isLoading}>
-              Add Alumni
+              Save Changes
             </Button>
           </div>
         </form>

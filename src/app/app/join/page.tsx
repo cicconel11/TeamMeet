@@ -10,6 +10,7 @@ function JoinOrgForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const codeFromUrl = searchParams.get("code");
+  const tokenFromUrl = searchParams.get("token");
   
   const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -18,22 +19,127 @@ function JoinOrgForm() {
 
   // Auto-fill code from URL and optionally auto-submit
   useEffect(() => {
-    if (codeFromUrl && !code) {
+    if (tokenFromUrl && !code) {
+      // For token-based invites, we auto-submit immediately
+      setAutoSubmitting(true);
+    } else if (codeFromUrl && !code) {
       setCode(codeFromUrl.toUpperCase());
       setAutoSubmitting(true);
     }
-  }, [codeFromUrl, code]);
+  }, [codeFromUrl, tokenFromUrl, code]);
 
-  // Auto-submit when code is filled from URL
+  // Auto-submit when code is filled from URL or token is present
   useEffect(() => {
-    if (autoSubmitting && code) {
-      const form = document.getElementById("join-form") as HTMLFormElement;
-      if (form) {
-        form.requestSubmit();
+    const processAutoSubmit = async () => {
+      if (!autoSubmitting) return;
+
+      if (tokenFromUrl) {
+        setIsLoading(true);
+        setError(null);
+
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setError("You must be logged in to join an organization");
+          setIsLoading(false);
+          setAutoSubmitting(false);
+          return;
+        }
+
+        const { data: inviteData, error: inviteError } = await supabase
+          .from("organization_invites")
+          .select(`*, organizations (id, name, slug)`)
+          .eq("token", tokenFromUrl)
+          .single();
+
+        if (inviteError || !inviteData) {
+          setError("Invalid invite link. Please check and try again.");
+          setIsLoading(false);
+          setAutoSubmitting(false);
+          return;
+        }
+
+        const invite = inviteData as {
+          id: string;
+          organization_id: string;
+          role: string;
+          uses_remaining: number | null;
+          expires_at: string | null;
+          revoked_at: string | null;
+          organizations: { id: string; name: string; slug: string };
+        };
+
+        if (invite.revoked_at) {
+          setError("This invite has been revoked.");
+          setIsLoading(false);
+          setAutoSubmitting(false);
+          return;
+        }
+        if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+          setError("This invite has expired.");
+          setIsLoading(false);
+          setAutoSubmitting(false);
+          return;
+        }
+        if (invite.uses_remaining !== null && invite.uses_remaining <= 0) {
+          setError("This invite has no uses remaining.");
+          setIsLoading(false);
+          setAutoSubmitting(false);
+          return;
+        }
+
+        const { data: existingRole } = await supabase
+          .from("user_organization_roles")
+          .select("id, status")
+          .eq("user_id", user.id)
+          .eq("organization_id", invite.organization_id)
+          .single();
+
+        if (existingRole) {
+          if ((existingRole as { status: string }).status === "revoked") {
+            setError("Your access to this organization has been revoked. Contact an admin.");
+          } else {
+            setError("You are already a member of this organization.");
+            setTimeout(() => router.push(`/${invite.organizations.slug}`), 1500);
+          }
+          setIsLoading(false);
+          setAutoSubmitting(false);
+          return;
+        }
+
+        let role = invite.role;
+        if (role === "member") role = "active_member";
+        if (role === "viewer") role = "alumni";
+
+        const { error: roleError } = await supabase
+          .from("user_organization_roles")
+          .insert({ user_id: user.id, organization_id: invite.organization_id, role, status: "active" });
+
+        if (roleError) {
+          setError("Failed to join organization. Please try again.");
+          setIsLoading(false);
+          setAutoSubmitting(false);
+          return;
+        }
+
+        if (invite.uses_remaining !== null) {
+          await supabase
+            .from("organization_invites")
+            .update({ uses_remaining: invite.uses_remaining - 1 })
+            .eq("id", invite.id)
+            .gt("uses_remaining", 0);
+        }
+
+        router.push(`/${invite.organizations.slug}`);
+      } else if (code) {
+        const form = document.getElementById("join-form") as HTMLFormElement;
+        if (form) form.requestSubmit();
       }
       setAutoSubmitting(false);
-    }
-  }, [autoSubmitting, code]);
+    };
+
+    processAutoSubmit();
+  }, [autoSubmitting, code, tokenFromUrl, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,27 +176,43 @@ function JoinOrgForm() {
       return;
     }
 
-    // Type assertion for the joined data
-    const invite = inviteData as {
+    await processInvite(supabase, inviteData, user);
+  };
+
+  const processInvite = async (
+    supabase: ReturnType<typeof createClient>,
+    inviteData: {
       id: string;
       organization_id: string;
       code: string;
+      token: string | null;
       role: string;
       uses_remaining: number | null;
       expires_at: string | null;
+      revoked_at: string | null;
       organizations: { id: string; name: string; slug: string };
-    };
+    },
+    user: { id: string }
+  ) => {
+    const invite = inviteData;
+
+    // Check if invite has been revoked
+    if (invite.revoked_at) {
+      setError("This invite has been revoked.");
+      setIsLoading(false);
+      return;
+    }
 
     // Check if invite has expired
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-      setError("This invite code has expired.");
+      setError("This invite has expired.");
       setIsLoading(false);
       return;
     }
 
     // Check if invite has uses remaining
     if (invite.uses_remaining !== null && invite.uses_remaining <= 0) {
-      setError("This invite code has no uses remaining.");
+      setError("This invite has no uses remaining.");
       setIsLoading(false);
       return;
     }
@@ -98,27 +220,36 @@ function JoinOrgForm() {
     // Check if user is already a member
     const { data: existingRole } = await supabase
       .from("user_organization_roles")
-      .select("id")
+      .select("id, status")
       .eq("user_id", user.id)
       .eq("organization_id", invite.organization_id)
       .single();
 
     if (existingRole) {
-      setError("You are already a member of this organization.");
-      // Redirect them anyway after a short delay
-      setTimeout(() => router.push(`/${invite.organizations.slug}`), 1500);
+      if (existingRole.status === "revoked") {
+        setError("Your access to this organization has been revoked. Contact an admin.");
+      } else {
+        setError("You are already a member of this organization.");
+        // Redirect them anyway after a short delay
+        setTimeout(() => router.push(`/${invite.organizations.slug}`), 1500);
+      }
       setIsLoading(false);
       return;
     }
 
+    // Map role if needed (legacy support)
+    let role = invite.role;
+    if (role === "member") role = "active_member";
+    if (role === "viewer") role = "alumni";
+
     // Add user to organization with the role specified in the invite
-    const { error: roleError } = await (supabase
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .from("user_organization_roles") as any)
+    const { error: roleError } = await supabase
+      .from("user_organization_roles")
       .insert({
         user_id: user.id,
         organization_id: invite.organization_id,
-        role: invite.role || "member",
+        role: role,
+        status: "active",
       });
 
     if (roleError) {
@@ -127,12 +258,13 @@ function JoinOrgForm() {
       return;
     }
 
-    // Decrement uses_remaining if it's set
+    // Decrement uses_remaining if it's set (atomic update)
     if (invite.uses_remaining !== null) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase.from("organization_invites") as any)
+      await supabase
+        .from("organization_invites")
         .update({ uses_remaining: invite.uses_remaining - 1 })
-        .eq("id", invite.id);
+        .eq("id", invite.id)
+        .gt("uses_remaining", 0);
     }
 
     // Success! Redirect to the organization
@@ -177,7 +309,9 @@ function JoinOrgForm() {
             </div>
             <h2 className="text-2xl font-bold text-foreground mb-2">Join an Organization</h2>
             <p className="text-muted-foreground">
-              Enter the invite code you received from an organization admin.
+              {tokenFromUrl 
+                ? "Processing your invite link..."
+                : "Enter the invite code you received from an organization admin."}
             </p>
           </div>
 
@@ -187,23 +321,31 @@ function JoinOrgForm() {
             </div>
           )}
 
-          <form id="join-form" onSubmit={handleSubmit}>
-            <div className="space-y-6">
-              <Input
-                label="Invite Code"
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="ABCD1234"
-                className="text-center text-2xl tracking-widest font-mono"
-                required
-              />
+          {!tokenFromUrl && (
+            <form id="join-form" onSubmit={handleSubmit}>
+              <div className="space-y-6">
+                <Input
+                  label="Invite Code"
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  placeholder="ABCD1234"
+                  className="text-center text-2xl tracking-widest font-mono"
+                  required
+                />
 
-              <Button type="submit" className="w-full" isLoading={isLoading}>
-                Join Organization
-              </Button>
+                <Button type="submit" className="w-full" isLoading={isLoading}>
+                  Join Organization
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {tokenFromUrl && isLoading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500" />
             </div>
-          </form>
+          )}
 
           <div className="mt-6 pt-6 border-t border-border text-center">
             <p className="text-sm text-muted-foreground mb-3">
@@ -234,4 +376,3 @@ export default function JoinOrgPage() {
     </Suspense>
   );
 }
-

@@ -5,13 +5,16 @@ import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/layout";
 import { Button, Card, Input, Select, Badge } from "@/components/ui";
+import { QRCodeDisplay } from "@/components/invites";
 
 interface Invite {
   id: string;
   code: string;
+  token: string | null;
   role: string;
   uses_remaining: number | null;
   expires_at: string | null;
+  revoked_at: string | null;
   created_at: string;
 }
 
@@ -31,6 +34,15 @@ function generateCode(): string {
   return code;
 }
 
+function generateToken(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let token = "";
+  for (let i = 0; i < 32; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+}
+
 export default function InvitesPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
@@ -42,10 +54,11 @@ export default function InvitesPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [showQR, setShowQR] = useState<string | null>(null);
 
   // New invite form state
   const [showForm, setShowForm] = useState(false);
-  const [newRole, setNewRole] = useState<"member" | "admin">("member");
+  const [newRole, setNewRole] = useState<"active_member" | "admin" | "alumni">("active_member");
   const [newUses, setNewUses] = useState<string>("");
   const [newExpires, setNewExpires] = useState<string>("");
   const [isCancelling, setIsCancelling] = useState(false);
@@ -114,6 +127,7 @@ export default function InvitesPage() {
     const { data: { user } } = await supabase.auth.getUser();
 
     const code = generateCode();
+    const token = generateToken();
     const usesRemaining = newUses ? parseInt(newUses) : null;
     const expiresAt = newExpires ? new Date(newExpires).toISOString() : null;
 
@@ -122,6 +136,7 @@ export default function InvitesPage() {
       .insert({
         organization_id: orgId,
         code,
+        token,
         role: newRole,
         uses_remaining: usesRemaining,
         expires_at: expiresAt,
@@ -135,7 +150,7 @@ export default function InvitesPage() {
     } else if (data) {
       setInvites([data, ...invites]);
       setShowForm(false);
-      setNewRole("member");
+      setNewRole("active_member");
       setNewUses("");
       setNewExpires("");
     }
@@ -151,6 +166,18 @@ export default function InvitesPage() {
       .eq("id", inviteId);
 
     setInvites(invites.filter(i => i.id !== inviteId));
+  };
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    const supabase = createClient();
+    await supabase
+      .from("organization_invites")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", inviteId);
+
+    setInvites(invites.map(i => 
+      i.id === inviteId ? { ...i, revoked_at: new Date().toISOString() } : i
+    ));
   };
 
   const cancelSubscription = async () => {
@@ -199,13 +226,18 @@ export default function InvitesPage() {
     }
   };
 
-  const copyToClipboard = (code: string, type: "code" | "link" = "code") => {
-    const textToCopy = type === "link" 
-      ? `${window.location.origin}/app/join?code=${code}`
-      : code;
-    navigator.clipboard.writeText(textToCopy);
-    setCopied(`${type}-${code}`);
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
     setTimeout(() => setCopied(null), 2000);
+  };
+
+  const getInviteLink = (invite: Invite) => {
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    if (invite.token) {
+      return `${base}/app/join?token=${invite.token}`;
+    }
+    return `${base}/app/join?code=${invite.code}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -221,6 +253,10 @@ export default function InvitesPage() {
     return new Date(expiresAt) < new Date();
   };
 
+  const isRevoked = (revokedAt: string | null) => {
+    return !!revokedAt;
+  };
+
   const updateAccess = async (userId: string, status: "active" | "revoked") => {
     if (!orgId) return;
     const supabase = createClient();
@@ -233,6 +269,24 @@ export default function InvitesPage() {
     setMemberships((prev) =>
       prev.map((m) => (m.user_id === userId ? { ...m, status } : m))
     );
+  };
+
+  const getRoleBadgeVariant = (role: string) => {
+    switch (role) {
+      case "admin": return "warning";
+      case "alumni": return "muted";
+      default: return "primary";
+    }
+  };
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case "admin": return "Admin";
+      case "alumni": return "Alumni";
+      case "active_member": return "Active Member";
+      case "member": return "Member";
+      default: return role;
+    }
   };
 
   if (isLoading) {
@@ -278,10 +332,11 @@ export default function InvitesPage() {
             <Select
               label="Role"
               value={newRole}
-              onChange={(e) => setNewRole(e.target.value as "member" | "admin")}
+              onChange={(e) => setNewRole(e.target.value as "active_member" | "admin" | "alumni")}
               options={[
-                { value: "member", label: "Member" },
+                { value: "active_member", label: "Active Member" },
                 { value: "admin", label: "Admin" },
+                { value: "alumni", label: "Alumni" },
               ]}
             />
             <Input
@@ -315,64 +370,96 @@ export default function InvitesPage() {
         <div className="space-y-4">
           {invites.map((invite) => {
             const expired = isExpired(invite.expires_at);
+            const revoked = isRevoked(invite.revoked_at);
             const exhausted = invite.uses_remaining !== null && invite.uses_remaining <= 0;
-            const invalid = expired || exhausted;
+            const invalid = expired || exhausted || revoked;
+            const inviteLink = getInviteLink(invite);
 
             return (
               <Card key={invite.id} className={`p-6 ${invalid ? "opacity-60" : ""}`}>
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <div
-                      className="font-mono text-xl font-bold tracking-wider cursor-pointer hover:text-emerald-500 transition-colors"
-                      onClick={() => copyToClipboard(invite.code, "code")}
-                      title="Click to copy code"
-                    >
-                      {invite.code}
-                      {copied === `code-${invite.code}` && (
-                        <span className="ml-2 text-xs text-emerald-500 font-normal">Copied!</span>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge variant={invite.role === "admin" ? "warning" : "primary"}>
-                        {invite.role}
-                      </Badge>
-                      {expired && <Badge variant="error">Expired</Badge>}
-                      {exhausted && <Badge variant="error">No uses left</Badge>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => copyToClipboard(invite.code, "link")}
-                      className="text-emerald-600 hover:text-emerald-700"
-                    >
-                      <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                      </svg>
-                      {copied === `link-${invite.code}` ? "Copied!" : "Copy Link"}
-                    </Button>
-                    <div className="text-sm text-muted-foreground text-right hidden sm:block">
-                      <div>
-                        {invite.uses_remaining !== null
-                          ? `${invite.uses_remaining} uses left`
-                          : "Unlimited uses"}
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div
+                        className="font-mono text-xl font-bold tracking-wider cursor-pointer hover:text-emerald-500 transition-colors"
+                        onClick={() => copyToClipboard(invite.code, `code-${invite.id}`)}
+                        title="Click to copy code"
+                      >
+                        {invite.code}
+                        {copied === `code-${invite.id}` && (
+                          <span className="ml-2 text-xs text-emerald-500 font-normal">Copied!</span>
+                        )}
                       </div>
-                      {invite.expires_at && (
-                        <div>Expires {formatDate(invite.expires_at)}</div>
-                      )}
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge variant={getRoleBadgeVariant(invite.role)}>
+                          {getRoleLabel(invite.role)}
+                        </Badge>
+                        {expired && <Badge variant="error">Expired</Badge>}
+                        {exhausted && <Badge variant="error">No uses left</Badge>}
+                        {revoked && <Badge variant="error">Revoked</Badge>}
+                      </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteInvite(invite.id)}
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                      </svg>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => copyToClipboard(inviteLink, `link-${invite.id}`)}
+                        className="text-emerald-600 hover:text-emerald-700"
+                      >
+                        <svg className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                        </svg>
+                        {copied === `link-${invite.id}` ? "Copied!" : "Copy Link"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setShowQR(showQR === invite.id ? null : invite.id)}
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0113.5 9.375v-4.5z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 6.75h.75v.75h-.75v-.75zM6.75 16.5h.75v.75h-.75v-.75zM16.5 6.75h.75v.75h-.75v-.75zM13.5 13.5h.75v.75h-.75v-.75zM13.5 19.5h.75v.75h-.75v-.75zM19.5 13.5h.75v.75h-.75v-.75zM19.5 19.5h.75v.75h-.75v-.75zM16.5 16.5h.75v.75h-.75v-.75z" />
+                        </svg>
+                      </Button>
+                      <div className="text-sm text-muted-foreground text-right hidden sm:block">
+                        <div>
+                          {invite.uses_remaining !== null
+                            ? `${invite.uses_remaining} uses left`
+                            : "Unlimited uses"}
+                        </div>
+                        {invite.expires_at && (
+                          <div>Expires {formatDate(invite.expires_at)}</div>
+                        )}
+                      </div>
+                      {!revoked && !expired && !exhausted && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRevokeInvite(invite.id)}
+                          className="text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                        >
+                          Revoke
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteInvite(invite.id)}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </Button>
+                    </div>
                   </div>
+                  
+                  {/* QR Code Section */}
+                  {showQR === invite.id && (
+                    <div className="border-t border-border pt-4 flex justify-center">
+                      <QRCodeDisplay url={inviteLink} size={180} />
+                    </div>
+                  )}
                 </div>
               </Card>
             );
@@ -409,7 +496,7 @@ export default function InvitesPage() {
               <div key={m.user_id} className="py-3 flex items-center justify-between gap-3">
                 <div>
                   <p className="font-medium text-foreground">{m.users?.name || m.users?.email || "User"}</p>
-                  <p className="text-xs text-muted-foreground">{m.role}</p>
+                  <p className="text-xs text-muted-foreground">{getRoleLabel(m.role)}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant={m.status === "active" ? "success" : "error"}>
@@ -471,4 +558,3 @@ export default function InvitesPage() {
     </div>
   );
 }
-

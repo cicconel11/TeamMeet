@@ -135,31 +135,47 @@ export default async function AlumniDetailPage({ params }: AlumniDetailPageProps
               <dt className="text-sm text-muted-foreground">Major</dt>
               <dd className="text-foreground font-medium">{alum.major || "—"}</dd>
             </div>
-            <div className="sm:col-span-2">
-              <dt className="text-sm text-muted-foreground">Current Position</dt>
-              <dd className="text-foreground font-medium">{alum.job_title || "—"}</dd>
+            <div>
+              <dt className="text-sm text-muted-foreground">Position Title</dt>
+              <dd className="text-foreground font-medium">{alum.position_title || alum.job_title || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Company</dt>
+              <dd className="text-foreground font-medium">{alum.current_company || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Industry</dt>
+              <dd className="text-foreground font-medium">{alum.industry || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">City</dt>
+              <dd className="text-foreground font-medium">{alum.current_city || "—"}</dd>
             </div>
             <div>
               <dt className="text-sm text-muted-foreground">Email</dt>
               <dd className="text-foreground font-medium">{alum.email || "—"}</dd>
             </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">LinkedIn</dt>
-            <dd className="text-foreground font-medium">
-              {alum.linkedin_url ? (
-                <a
-                  href={alum.linkedin_url}
-                  className="text-org-primary hover:underline break-all"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View profile
-                </a>
-              ) : (
-                "—"
-              )}
-            </dd>
-          </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Phone</dt>
+              <dd className="text-foreground font-medium">{alum.phone_number || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">LinkedIn</dt>
+              <dd className="text-foreground font-medium">
+                {alum.linkedin_url ? (
+                  <a
+                    href={alum.linkedin_url}
+                    className="text-org-primary hover:underline break-all"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View profile
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
             <div>
               <dt className="text-sm text-muted-foreground">Added</dt>
               <dd className="text-foreground font-medium">

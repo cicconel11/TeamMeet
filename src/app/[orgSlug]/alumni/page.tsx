@@ -2,11 +2,18 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Badge, Avatar, Button, EmptyState } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
+import { AlumniFilters } from "@/components/alumni";
 import { isOrgAdmin } from "@/lib/auth";
 
 interface AlumniPageProps {
   params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{
+    year?: string;
+    industry?: string;
+    company?: string;
+    city?: string;
+    position?: string;
+  }>;
 }
 
 export default async function AlumniPage({ params, searchParams }: AlumniPageProps) {
@@ -35,26 +42,46 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
     .is("deleted_at", null)
     .order("graduation_year", { ascending: false });
 
+  // Apply filters
   if (filters.year) {
     query = query.eq("graduation_year", parseInt(filters.year));
+  }
+  if (filters.industry) {
+    query = query.eq("industry", filters.industry);
+  }
+  if (filters.company) {
+    query = query.eq("current_company", filters.company);
+  }
+  if (filters.city) {
+    query = query.eq("current_city", filters.city);
+  }
+  if (filters.position) {
+    query = query.eq("position_title", filters.position);
   }
 
   const { data: alumni } = await query;
 
-  // Get unique graduation years for filter
+  // Get unique values for filter dropdowns
   const { data: allAlumni } = await supabase
     .from("alumni")
-    .select("graduation_year")
+    .select("graduation_year, industry, current_company, current_city, position_title")
     .eq("organization_id", org.id)
     .is("deleted_at", null);
-  
-  const years = [...new Set(allAlumni?.map((a) => a.graduation_year).filter(Boolean))].sort((a, b) => (b || 0) - (a || 0));
+
+  const years = [...new Set(allAlumni?.map((a) => a.graduation_year).filter(Boolean))];
+  const industries = [...new Set(allAlumni?.map((a) => a.industry).filter(Boolean))];
+  const companies = [...new Set(allAlumni?.map((a) => a.current_company).filter(Boolean))];
+  const cities = [...new Set(allAlumni?.map((a) => a.current_city).filter(Boolean))];
+  const positions = [...new Set(allAlumni?.map((a) => a.position_title).filter(Boolean))];
+
+  const hasActiveFilters =
+    filters.year || filters.industry || filters.company || filters.city || filters.position;
 
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="Alumni"
-        description={`${alumni?.length || 0} alumni in our network`}
+        description={`${alumni?.length || 0} alumni${hasActiveFilters ? " (filtered)" : " in our network"}`}
         actions={
           isAdmin && (
             <Link href={`/${orgSlug}/alumni/new`}>
@@ -69,34 +96,14 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
         }
       />
 
-      {/* Year Filter */}
-      {years.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          <Link
-            href={`/${orgSlug}/alumni`}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-              !filters.year
-                ? "bg-org-primary text-white"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            All Years
-          </Link>
-          {years.map((year) => (
-            <Link
-              key={year}
-              href={`/${orgSlug}/alumni?year=${year}`}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                filters.year === String(year)
-                  ? "bg-org-primary text-white"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {year}
-            </Link>
-          ))}
-        </div>
-      )}
+      {/* Dynamic Filters */}
+      <AlumniFilters
+        years={years}
+        industries={industries}
+        companies={companies}
+        cities={cities}
+        positions={positions}
+      />
 
       {/* Alumni Grid */}
       {alumni && alumni.length > 0 ? (
@@ -114,16 +121,22 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
                     <h3 className="font-semibold text-foreground truncate">
                       {alum.first_name} {alum.last_name}
                     </h3>
-                    {alum.job_title && (
-                      <p className="text-sm text-muted-foreground truncate">{alum.job_title}</p>
+                    {(alum.position_title || alum.job_title) && (
+                      <p className="text-sm text-muted-foreground truncate">
+                        {alum.position_title || alum.job_title}
+                        {alum.current_company && ` at ${alum.current_company}`}
+                      </p>
                     )}
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {alum.graduation_year && (
                         <Badge variant="muted">Class of {alum.graduation_year}</Badge>
                       )}
-                      {alum.major && (
+                      {alum.industry && (
+                        <Badge variant="primary">{alum.industry}</Badge>
+                      )}
+                      {alum.current_city && (
                         <span className="text-xs text-muted-foreground truncate">
-                          {alum.major}
+                          {alum.current_city}
                         </span>
                       )}
                     </div>
@@ -142,9 +155,9 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
               </svg>
             }
             title="No alumni found"
-            description={filters.year ? `No alumni from ${filters.year}` : "No alumni in the directory yet"}
+            description={hasActiveFilters ? "Try adjusting your filters" : "No alumni in the directory yet"}
             action={
-              isAdmin && (
+              isAdmin && !hasActiveFilters && (
                 <Link href={`/${orgSlug}/alumni/new`}>
                   <Button>Add First Alumni</Button>
                 </Link>
@@ -156,4 +169,3 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
     </div>
   );
 }
-

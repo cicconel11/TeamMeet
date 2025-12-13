@@ -132,6 +132,53 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  // Check for revoked access on org routes
+  // Org routes are paths like /[orgSlug]/... but not /app/ or /auth/ or /api/ or /settings/
+  const isOrgRoute = !pathname.startsWith("/app") && 
+                     !pathname.startsWith("/auth") && 
+                     !pathname.startsWith("/api") &&
+                     !pathname.startsWith("/settings") &&
+                     pathname !== "/" &&
+                     pathname.split("/").filter(Boolean).length >= 1;
+
+  if (isOrgRoute && user) {
+    const orgSlug = pathname.split("/")[1];
+    
+    // Only check if it looks like an org slug (not a system path)
+    if (orgSlug && !["app", "auth", "api", "settings", "_next", "favicon.ico"].includes(orgSlug)) {
+      try {
+        // Get organization by slug
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("id")
+          .eq("slug", orgSlug)
+          .maybeSingle();
+
+        if (org) {
+          // Check user's membership status
+          const { data: membership } = await supabase
+            .from("user_organization_roles")
+            .select("status")
+            .eq("organization_id", org.id)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (membership?.status === "revoked") {
+            // User's access has been revoked - redirect to app with error
+            const redirectUrl = new URL("/app", request.url);
+            redirectUrl.searchParams.set("error", "access_revoked");
+            return NextResponse.redirect(redirectUrl);
+          }
+        }
+      } catch (e) {
+        // Log error but don't block the request
+        if (shouldLog) {
+          console.error("[AUTH-MW] Error checking membership status:", e);
+        }
+      }
+    }
+  }
+
   return response;
 }
 

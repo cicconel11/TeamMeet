@@ -9,6 +9,7 @@ export type NotificationAudience = "members" | "alumni" | "both";
 export type MembershipStatus = "active" | "revoked";
 export type MentorshipStatus = "active" | "completed" | "paused";
 export type WorkoutStatus = "not_started" | "in_progress" | "completed";
+export type EmbedType = "link" | "iframe";
 
 export interface Organization {
   id: string;
@@ -65,6 +66,11 @@ export interface Alumni {
   job_title: string | null;
   notes: string | null;
   linkedin_url: string | null;
+  phone_number: string | null;
+  industry: string | null;
+  current_company: string | null;
+  current_city: string | null;
+  position_title: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +86,8 @@ export interface Event {
   event_type: EventType;
   is_philanthropy: boolean;
   created_by_user_id: string | null;
+  audience: NotificationAudience;
+  target_user_ids: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +100,8 @@ export interface Announcement {
   published_at: string;
   created_by_user_id: string | null;
   is_pinned: boolean;
+  audience: NotificationAudience;
+  target_user_ids: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -250,6 +260,30 @@ export interface NotificationPreference {
   updated_at: string;
 }
 
+export interface PhilanthropyEmbed {
+  id: string;
+  organization_id: string;
+  title: string;
+  url: string;
+  embed_type: EmbedType;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationInvite {
+  id: string;
+  organization_id: string;
+  code: string;
+  token: string | null;
+  role: string;
+  uses_remaining: number | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+}
+
 // Supabase Database type for typed client
 export interface Database {
   public: {
@@ -353,6 +387,16 @@ export interface Database {
         Row: NotificationPreference;
         Insert: Omit<NotificationPreference, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<NotificationPreference, "id" | "created_at">>;
+      };
+      org_philanthropy_embeds: {
+        Row: PhilanthropyEmbed;
+        Insert: Omit<PhilanthropyEmbed, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<PhilanthropyEmbed, "id" | "created_at">>;
+      };
+      organization_invites: {
+        Row: OrganizationInvite;
+        Insert: Omit<OrganizationInvite, "id" | "created_at">;
+        Update: Partial<Omit<OrganizationInvite, "id" | "created_at">>;
       };
     };
     Enums: {

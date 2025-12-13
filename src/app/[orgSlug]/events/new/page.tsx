@@ -1,19 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, Button, Input, Select, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 
+type Audience = "members" | "alumni" | "both" | "specific";
+
+type TargetUser = {
+  id: string;
+  label: string;
+};
+
 export default function NewEventPage() {
   const router = useRouter();
   const params = useParams();
   const orgSlug = params.orgSlug as string;
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+  const [userOptions, setUserOptions] = useState<TargetUser[]>([]);
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -24,7 +32,48 @@ export default function NewEventPage() {
     location: "",
     event_type: "general",
     is_philanthropy: false,
+    audience: "both" as Audience,
+    send_notification: true,
   });
+  const [targetUserIds, setTargetUserIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const load = async () => {
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("slug", orgSlug)
+        .maybeSingle();
+
+      if (!org) return;
+
+      const { data: memberships } = await supabase
+        .from("user_organization_roles")
+        .select("user_id, users(name,email)")
+        .eq("organization_id", org.id)
+        .eq("status", "active");
+
+      const options =
+        memberships?.map((m) => {
+          const user = Array.isArray(m.users) ? m.users[0] : m.users;
+          return {
+            id: m.user_id,
+            label: user?.name || user?.email || "User",
+          };
+        }) || [];
+
+      setUserOptions(options);
+    };
+
+    load();
+  }, [orgSlug]);
+
+  const toggleTarget = (id: string) => {
+    setTargetUserIds((prev) =>
+      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,13 +95,18 @@ export default function NewEventPage() {
       return;
     }
 
+    const { data: { user } } = await supabase.auth.getUser();
+
     // Combine date and time
     const startDateTime = new Date(`${formData.start_date}T${formData.start_time}`).toISOString();
     const endDateTime = formData.end_date && formData.end_time
       ? new Date(`${formData.end_date}T${formData.end_time}`).toISOString()
       : null;
 
-    const { error: insertError } = await supabase.from("events").insert({
+    const audienceValue = formData.audience === "specific" ? "both" : formData.audience;
+    const targetIds = formData.audience === "specific" ? targetUserIds : null;
+
+    const { error: insertError, data: event } = await supabase.from("events").insert({
       organization_id: org.id,
       title: formData.title,
       description: formData.description || null,
@@ -61,12 +115,32 @@ export default function NewEventPage() {
       location: formData.location || null,
       event_type: formData.event_type as "general" | "philanthropy" | "game" | "meeting" | "social" | "fundraiser",
       is_philanthropy: formData.is_philanthropy || formData.event_type === "philanthropy",
-    });
+      created_by_user_id: user?.id || null,
+      audience: audienceValue,
+      target_user_ids: targetIds,
+    }).select().single();
 
     if (insertError) {
       setError(insertError.message);
       setIsLoading(false);
       return;
+    }
+
+    // Send notification if enabled
+    if (formData.send_notification && event) {
+      try {
+        await supabase.from("notifications").insert({
+          organization_id: org.id,
+          title: `New Event: ${formData.title}`,
+          body: formData.description || `Event scheduled for ${formData.start_date}`,
+          channel: "email",
+          audience: audienceValue,
+          target_user_ids: targetIds,
+          sent_at: new Date().toISOString(),
+        });
+      } catch (notifError) {
+        console.error("Failed to create notification record:", notifError);
+      }
     }
 
     router.push(`/${orgSlug}/events`);
@@ -158,6 +232,40 @@ export default function NewEventPage() {
             ]}
           />
 
+          <Select
+            label="Audience"
+            value={formData.audience}
+            onChange={(e) => setFormData({ ...formData, audience: e.target.value as Audience })}
+            options={[
+              { label: "Members + Alumni", value: "both" },
+              { label: "Active Members only", value: "members" },
+              { label: "Alumni only", value: "alumni" },
+              { label: "Specific individuals", value: "specific" },
+            ]}
+          />
+
+          {formData.audience === "specific" && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">Select recipients</p>
+              <div className="max-h-48 overflow-y-auto space-y-2 rounded-xl border border-border p-3">
+                {userOptions.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No users available</p>
+                )}
+                {userOptions.map((user) => (
+                  <label key={user.id} className="flex items-center gap-3 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-border"
+                      checked={targetUserIds.includes(user.id)}
+                      onChange={() => toggleTarget(user.id)}
+                    />
+                    <span className="truncate">{user.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -168,6 +276,19 @@ export default function NewEventPage() {
             />
             <label htmlFor="is_philanthropy" className="text-sm text-foreground">
               Mark as philanthropy event (will show in Philanthropy section)
+            </label>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="send_notification"
+              checked={formData.send_notification}
+              onChange={(e) => setFormData({ ...formData, send_notification: e.target.checked })}
+              className="h-4 w-4 rounded border-border text-org-primary focus:ring-org-primary"
+            />
+            <label htmlFor="send_notification" className="text-sm text-foreground">
+              Send push notification to selected audience
             </label>
           </div>
 
@@ -184,4 +305,3 @@ export default function NewEventPage() {
     </div>
   );
 }
-

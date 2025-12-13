@@ -2,7 +2,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
+import { EmbedManager, EmbedViewer } from "@/components/philanthropy";
 import { isOrgAdmin } from "@/lib/auth";
+import type { PhilanthropyEmbed } from "@/types/database";
 
 interface PhilanthropyPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -24,6 +26,15 @@ export default async function PhilanthropyPage({ params, searchParams }: Philant
   if (!org) return null;
 
   const isAdmin = await isOrgAdmin(org.id);
+
+  // Fetch philanthropy embeds
+  const { data: embedsData } = await supabase
+    .from("org_philanthropy_embeds")
+    .select("*")
+    .eq("organization_id", org.id)
+    .order("display_order", { ascending: true });
+
+  const embeds = (embedsData || []) as PhilanthropyEmbed[];
 
   // Fetch philanthropy events (events where is_philanthropy = true or event_type = philanthropy)
   let query = supabase
@@ -69,6 +80,12 @@ export default async function PhilanthropyPage({ params, searchParams }: Philant
           )
         }
       />
+
+      {/* Admin Embed Manager */}
+      {isAdmin && <EmbedManager orgId={org.id} embeds={embeds} />}
+
+      {/* Public Embed Viewer */}
+      {!isAdmin && <EmbedViewer embeds={embeds} />}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
@@ -214,4 +231,3 @@ export default async function PhilanthropyPage({ params, searchParams }: Philant
     </div>
   );
 }
-
