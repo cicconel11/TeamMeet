@@ -3,22 +3,23 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Card, Button, Input, Textarea, Select } from "@/components/ui";
+import { Card, Button, Input, Select, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
-
-type Audience = "all" | "members" | "active_members" | "alumni" | "individuals";
+import type { Announcement, AnnouncementAudience } from "@/types/database";
 
 type TargetUser = {
   id: string;
   label: string;
 };
 
-export default function NewAnnouncementPage() {
+export default function EditAnnouncementPage() {
   const router = useRouter();
   const params = useParams();
   const orgSlug = params.orgSlug as string;
+  const announcementId = params.announcementId as string;
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [userOptions, setUserOptions] = useState<TargetUser[]>([]);
 
@@ -26,22 +27,51 @@ export default function NewAnnouncementPage() {
     title: "",
     body: "",
     is_pinned: false,
-    audience: "all" as Audience,
-    send_notification: true,
+    audience: "all" as AnnouncementAudience,
   });
   const [targetUserIds, setTargetUserIds] = useState<string[]>([]);
 
   useEffect(() => {
-    const supabase = createClient();
-    const load = async () => {
+    const fetchData = async () => {
+      const supabase = createClient();
+
       const { data: org } = await supabase
         .from("organizations")
         .select("id")
         .eq("slug", orgSlug)
-        .maybeSingle();
+        .single();
 
-      if (!org) return;
+      if (!org) {
+        setError("Organization not found");
+        setIsFetching(false);
+        return;
+      }
 
+      // Fetch announcement
+      const { data: announcement } = await supabase
+        .from("announcements")
+        .select("*")
+        .eq("id", announcementId)
+        .eq("organization_id", org.id)
+        .is("deleted_at", null)
+        .single();
+
+      if (!announcement) {
+        setError("Announcement not found");
+        setIsFetching(false);
+        return;
+      }
+
+      const a = announcement as Announcement;
+      setFormData({
+        title: a.title || "",
+        body: a.body || "",
+        is_pinned: a.is_pinned || false,
+        audience: a.audience || "all",
+      });
+      setTargetUserIds(a.audience_user_ids || []);
+
+      // Fetch user options for specific individuals
       const { data: memberships } = await supabase
         .from("user_organization_roles")
         .select("user_id, users(name,email)")
@@ -58,10 +88,11 @@ export default function NewAnnouncementPage() {
         }) || [];
 
       setUserOptions(options);
+      setIsFetching(false);
     };
 
-    load();
-  }, [orgSlug]);
+    fetchData();
+  }, [orgSlug, announcementId]);
 
   const toggleTarget = (id: string) => {
     setTargetUserIds((prev) =>
@@ -76,7 +107,6 @@ export default function NewAnnouncementPage() {
 
     const supabase = createClient();
 
-    // Get organization ID
     const { data: org } = await supabase
       .from("organizations")
       .select("id")
@@ -89,63 +119,55 @@ export default function NewAnnouncementPage() {
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-
     const audienceUserIds = formData.audience === "individuals" ? targetUserIds : null;
 
-    const { error: insertError, data: announcement } = await supabase
+    const { error: updateError } = await supabase
       .from("announcements")
-      .insert({
-        organization_id: org.id,
+      .update({
         title: formData.title,
         body: formData.body || null,
         is_pinned: formData.is_pinned,
-        published_at: new Date().toISOString(),
-        created_by_user_id: user?.id || null,
         audience: formData.audience,
         audience_user_ids: audienceUserIds,
+        updated_at: new Date().toISOString(),
       })
-      .select()
-      .single();
+      .eq("id", announcementId)
+      .eq("organization_id", org.id);
 
-    if (insertError) {
-      setError(insertError.message);
+    if (updateError) {
+      setError(updateError.message);
       setIsLoading(false);
       return;
-    }
-
-    // Send notification if enabled
-    if (formData.send_notification && announcement) {
-      try {
-        // Map announcement audience to notification audience
-        const notifAudience = formData.audience === "all" ? "both" 
-          : formData.audience === "active_members" ? "members"
-          : formData.audience === "individuals" ? "both"
-          : formData.audience;
-        
-        await supabase.from("notifications").insert({
-          organization_id: org.id,
-          title: formData.title,
-          body: formData.body || null,
-          channel: "email",
-          audience: notifAudience,
-          target_user_ids: audienceUserIds,
-          sent_at: new Date().toISOString(),
-        });
-      } catch (notifError) {
-        console.error("Failed to create notification record:", notifError);
-      }
     }
 
     router.push(`/${orgSlug}/announcements`);
     router.refresh();
   };
 
+  if (isFetching) {
+    return (
+      <div className="animate-fade-in">
+        <PageHeader
+          title="Edit Announcement"
+          description="Loading..."
+          backHref={`/${orgSlug}/announcements`}
+        />
+        <Card className="max-w-2xl p-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 bg-muted rounded-xl" />
+            <div className="h-24 bg-muted rounded-xl" />
+            <div className="h-10 bg-muted rounded-xl" />
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-in">
       <PageHeader
-        title="New Announcement"
-        description="Share news with your organization"
+        title="Edit Announcement"
+        description="Update announcement details"
         backHref={`/${orgSlug}/announcements`}
       />
 
@@ -176,7 +198,7 @@ export default function NewAnnouncementPage() {
           <Select
             label="Audience"
             value={formData.audience}
-            onChange={(e) => setFormData({ ...formData, audience: e.target.value as Audience })}
+            onChange={(e) => setFormData({ ...formData, audience: e.target.value as AnnouncementAudience })}
             options={[
               { label: "All Members", value: "all" },
               { label: "Active Members Only", value: "active_members" },
@@ -221,25 +243,12 @@ export default function NewAnnouncementPage() {
             </label>
           </div>
 
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="send_notification"
-              checked={formData.send_notification}
-              onChange={(e) => setFormData({ ...formData, send_notification: e.target.checked })}
-              className="h-4 w-4 rounded border-border text-org-primary focus:ring-org-primary"
-            />
-            <label htmlFor="send_notification" className="text-sm text-foreground">
-              Send push notification to selected audience
-            </label>
-          </div>
-
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button type="button" variant="secondary" onClick={() => router.back()}>
               Cancel
             </Button>
             <Button type="submit" isLoading={isLoading}>
-              Publish Announcement
+              Save Changes
             </Button>
           </div>
         </form>
@@ -247,3 +256,4 @@ export default function NewAnnouncementPage() {
     </div>
   );
 }
+

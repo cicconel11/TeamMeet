@@ -89,14 +89,21 @@ export default async function AnnouncementsPage({ params }: AnnouncementsPagePro
                         <Badge variant="warning">Pinned</Badge>
                       )}
                       {isAdmin && (
-                        <SoftDeleteButton
-                          table="announcements"
-                          id={announcement.id}
-                          organizationField="organization_id"
-                          organizationId={org.id}
-                          redirectTo={`/${orgSlug}/announcements`}
-                          label="Delete"
-                        />
+                        <>
+                          <Link href={`/${orgSlug}/announcements/${announcement.id}/edit`}>
+                            <Button variant="ghost" size="sm">
+                              Edit
+                            </Button>
+                          </Link>
+                          <SoftDeleteButton
+                            table="announcements"
+                            id={announcement.id}
+                            organizationField="organization_id"
+                            organizationId={org.id}
+                            redirectTo={`/${orgSlug}/announcements`}
+                            label="Delete"
+                          />
+                        </>
                       )}
                     </div>
                   </div>

@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Button, EmptyState } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { isOrgAdmin } from "@/lib/auth";
-import { DonationEmbedSettings } from "@/components/donations/DonationEmbedSettings";
+import { EmbedsManager, EmbedsViewer, type EmbedItem } from "@/components/shared";
+import type { DonationEmbed } from "@/types/database";
 
 interface DonationsPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -25,10 +26,27 @@ export default async function DonationsPage({ params, searchParams }: DonationsP
   if (!org) return null;
 
   const isAdmin = await isOrgAdmin(org.id);
-  const embedUrl =
-    org.donation_embed_url && org.donation_embed_url.startsWith("https://")
-      ? org.donation_embed_url
-      : null;
+
+  // Fetch donation embeds
+  let donationEmbeds: DonationEmbed[] = [];
+  let embedsError: string | null = null;
+
+  try {
+    const { data: embedsData, error: fetchError } = await supabase
+      .from("org_donation_embeds")
+      .select("*")
+      .eq("organization_id", org.id)
+      .order("display_order", { ascending: true });
+
+    if (fetchError) {
+      throw fetchError;
+    }
+    donationEmbeds = (embedsData || []) as DonationEmbed[];
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Unknown error";
+    console.error("Error fetching donation embeds:", message);
+    embedsError = `Error loading embeds: ${message}. Ensure migration is applied.`;
+  }
 
   // Build query
   let query = supabase
@@ -84,31 +102,44 @@ export default async function DonationsPage({ params, searchParams }: DonationsP
         }
       />
 
-      {(embedUrl || isAdmin) && (
-        <Card className="mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3">
-            {isAdmin && (
-              <div className="border-b border-border lg:border-b-0 lg:border-r border-border">
-                <DonationEmbedSettings orgId={org.id} orgSlug={orgSlug} currentUrl={embedUrl} />
-              </div>
-            )}
-            <div className="lg:col-span-2">
-              {embedUrl ? (
-                <div className="relative aspect-video">
-                  <iframe
-                    src={embedUrl}
-                    className="w-full h-full rounded-b-xl lg:rounded-xl border-0"
-                    title="Donation embed"
-                  />
-                </div>
-              ) : (
-                <div className="p-6 text-muted-foreground">
-                  No embed configured yet. Add a URL to display it here.
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
+      {/* Donation Prompt Banner */}
+      <Card className="p-4 mb-6 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+        <div className="flex items-start gap-3">
+          <svg className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            If you donated externally, please remember to record your exact donation in the app using the button in the top-right corner.
+          </p>
+        </div>
+      </Card>
+
+      {/* Donation Embeds Error Banner (dev only) */}
+      {embedsError && process.env.NODE_ENV === "development" && (
+        <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+          <p className="font-semibold">Development Error:</p>
+          <p>{embedsError}</p>
+        </div>
+      )}
+
+      {/* Admin Embed Manager */}
+      {isAdmin && (
+        <EmbedsManager
+          orgId={org.id}
+          embeds={donationEmbeds as EmbedItem[]}
+          tableName="org_donation_embeds"
+          title="Donation Embeds"
+          description="Add external donation pages or embeddable fundraising content"
+        />
+      )}
+
+      {/* Public Embed Viewer (non-admin) */}
+      {!isAdmin && donationEmbeds.length > 0 && (
+        <EmbedsViewer
+          embeds={donationEmbeds}
+          emptyTitle="No donation links"
+          emptyDescription="There are no external donation pages linked yet."
+        />
       )}
 
       {/* Stats */}
@@ -198,6 +229,7 @@ export default async function DonationsPage({ params, searchParams }: DonationsP
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Campaign</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Date</th>
                     <th className="text-right p-4 text-sm font-medium text-muted-foreground">Amount</th>
+                    {isAdmin && <th className="text-right p-4 text-sm font-medium text-muted-foreground">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -216,6 +248,13 @@ export default async function DonationsPage({ params, searchParams }: DonationsP
                       <td className="p-4 text-right font-mono font-medium text-foreground">
                         ${Number(donation.amount).toLocaleString()}
                       </td>
+                      {isAdmin && (
+                        <td className="p-4 text-right">
+                          <Link href={`/${orgSlug}/donations/${donation.id}/edit`}>
+                            <Button variant="ghost" size="sm">Edit</Button>
+                          </Link>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

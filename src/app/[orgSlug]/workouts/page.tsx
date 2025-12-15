@@ -94,11 +94,18 @@ export default async function WorkoutsPage({ params }: WorkoutsPageProps) {
                       )}
                     </div>
                   </div>
-                  {log && (
-                    <Badge variant="muted" className="self-start">
-                      {log.status.replace("_", " ")}
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-2 self-start">
+                    {log && (
+                      <Badge variant="muted">
+                        {log.status.replace("_", " ")}
+                      </Badge>
+                    )}
+                    {orgCtx.isAdmin && (
+                      <Link href={`/${orgSlug}/workouts/${workout.id}/edit`}>
+                        <Button variant="ghost" size="sm">Edit</Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
 
                 {orgCtx.isActiveMember ? (

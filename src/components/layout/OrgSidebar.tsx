@@ -24,6 +24,7 @@ const navItems: Array<{ href: string; label: string; icon: ComponentType<{ class
   { href: "/philanthropy", label: "Philanthropy", icon: HeartIcon, roles: ["admin", "active_member"] },
   { href: "/donations", label: "Donations", icon: DollarIcon, roles: ["admin"] },
   { href: "/records", label: "Records", icon: TrophyIcon, roles: ["admin", "active_member"] },
+  { href: "/settings/invites", label: "Invite", icon: InviteIcon, roles: ["admin"] },
 ];
 
 export function OrgSidebar({ organization, role }: OrgSidebarProps) {
@@ -195,6 +196,14 @@ function LogOutIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+    </svg>
+  );
+}
+
+function InviteIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
     </svg>
   );
 }

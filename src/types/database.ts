@@ -6,6 +6,7 @@ export type MemberStatus = "active" | "inactive";
 export type EventType = "general" | "philanthropy" | "game" | "meeting" | "social" | "fundraiser";
 export type NotificationChannel = "email" | "sms" | "both";
 export type NotificationAudience = "members" | "alumni" | "both";
+export type AnnouncementAudience = "all" | "members" | "active_members" | "alumni" | "individuals";
 export type MembershipStatus = "active" | "revoked" | "pending";
 export type MentorshipStatus = "active" | "completed" | "paused";
 export type WorkoutStatus = "not_started" | "in_progress" | "completed";
@@ -100,8 +101,8 @@ export interface Announcement {
   published_at: string;
   created_by_user_id: string | null;
   is_pinned: boolean;
-  audience: NotificationAudience;
-  target_user_ids: string[] | null;
+  audience: AnnouncementAudience;
+  audience_user_ids: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -271,6 +272,17 @@ export interface PhilanthropyEmbed {
   updated_at: string;
 }
 
+export interface DonationEmbed {
+  id: string;
+  organization_id: string;
+  title: string;
+  url: string;
+  embed_type: EmbedType;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface OrganizationInvite {
   id: string;
   organization_id: string;
@@ -392,6 +404,11 @@ export interface Database {
         Row: PhilanthropyEmbed;
         Insert: Omit<PhilanthropyEmbed, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<PhilanthropyEmbed, "id" | "created_at">>;
+      };
+      org_donation_embeds: {
+        Row: DonationEmbed;
+        Insert: Omit<DonationEmbed, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<DonationEmbed, "id" | "created_at">>;
       };
       organization_invites: {
         Row: OrganizationInvite;

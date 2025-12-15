@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Badge, Button, EmptyState } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
-import { EmbedManager, EmbedViewer } from "@/components/philanthropy";
+import { EmbedsManager, EmbedsViewer, type EmbedItem } from "@/components/shared";
 import { isOrgAdmin } from "@/lib/auth";
 import type { PhilanthropyEmbed } from "@/types/database";
 
@@ -93,18 +93,30 @@ export default async function PhilanthropyPage({ params, searchParams }: Philant
         }
       />
 
+      {/* Donation Prompt Banner */}
+      <Card className="p-4 mb-6 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+        <div className="flex items-start gap-3">
+          <svg className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            If you donated externally, please remember to record your exact donation in the app using the button in the top-right corner.
+          </p>
+        </div>
+      </Card>
+
       {/* Dev mode error banner for missing table */}
       {embedsError && process.env.NODE_ENV === "development" && (
-        <Card className="p-4 mb-6 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20">
+        <Card className="p-4 mb-6 border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20">
           <div className="flex items-start gap-3">
-            <svg className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
             <div>
-              <p className="font-medium text-amber-800 dark:text-amber-200">Database Migration Required</p>
-              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">{embedsError}</p>
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                Run: <code className="bg-amber-100 dark:bg-amber-800 px-1 py-0.5 rounded">npx supabase db push</code> or apply the migration manually.
+              <p className="font-medium text-red-800 dark:text-red-200">Database Migration Required</p>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">{embedsError}</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                Run: <code className="bg-red-100 dark:bg-red-800 px-1 py-0.5 rounded">npx supabase db push</code> or apply the migration manually.
               </p>
             </div>
           </div>
@@ -112,10 +124,24 @@ export default async function PhilanthropyPage({ params, searchParams }: Philant
       )}
 
       {/* Admin Embed Manager */}
-      {isAdmin && !embedsError && <EmbedManager orgId={org.id} embeds={embeds} />}
+      {isAdmin && !embedsError && (
+        <EmbedsManager
+          orgId={org.id}
+          embeds={embeds as EmbedItem[]}
+          tableName="org_philanthropy_embeds"
+          title="Fundraising Embeds"
+          description="Add external fundraising pages or embeddable content"
+        />
+      )}
 
       {/* Public Embed Viewer */}
-      {!isAdmin && !embedsError && <EmbedViewer embeds={embeds} />}
+      {!isAdmin && !embedsError && embeds.length > 0 && (
+        <EmbedsViewer
+          embeds={embeds}
+          emptyTitle="No fundraising links"
+          emptyDescription="There are no external fundraising pages linked yet."
+        />
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
