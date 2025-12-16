@@ -18,52 +18,64 @@ export type Database = {
         Row: {
           created_at: string | null
           current_city: string | null
+          current_company: string | null
           deleted_at: string | null
           email: string | null
           first_name: string
           graduation_year: number | null
           id: string
+          industry: string | null
           job_title: string | null
           last_name: string
           linkedin_url: string | null
           major: string | null
           notes: string | null
           organization_id: string
+          phone_number: string | null
           photo_url: string | null
+          position_title: string | null
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
           current_city?: string | null
+          current_company?: string | null
           deleted_at?: string | null
           email?: string | null
           first_name: string
           graduation_year?: number | null
           id?: string
+          industry?: string | null
           job_title?: string | null
           last_name: string
           linkedin_url?: string | null
           major?: string | null
           notes?: string | null
           organization_id: string
+          phone_number?: string | null
           photo_url?: string | null
+          position_title?: string | null
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
           current_city?: string | null
+          current_company?: string | null
           deleted_at?: string | null
           email?: string | null
           first_name?: string
           graduation_year?: number | null
           id?: string
+          industry?: string | null
           job_title?: string | null
           last_name: string
           linkedin_url?: string | null
           major?: string | null
           notes?: string | null
           organization_id?: string
+          phone_number?: string | null
           photo_url?: string | null
+          position_title?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -88,6 +100,7 @@ export type Database = {
           is_pinned: boolean | null
           organization_id: string
           published_at: string | null
+          target_user_ids: string[] | null
           title: string
           updated_at: string | null
         }
@@ -102,6 +115,7 @@ export type Database = {
           is_pinned?: boolean | null
           organization_id: string
           published_at?: string | null
+          target_user_ids?: string[] | null
           title: string
           updated_at?: string | null
         }
@@ -116,6 +130,7 @@ export type Database = {
           is_pinned?: boolean | null
           organization_id?: string
           published_at?: string | null
+          target_user_ids?: string[] | null
           title?: string
           updated_at?: string | null
         }
@@ -452,7 +467,7 @@ export type Database = {
           end_date?: string | null
           event_type?: Database["public"]["Enums"]["event_type"] | null
           id?: string
-          is_philanthropy: boolean | null
+          is_philanthropy?: boolean | null
           location?: string | null
           organization_id: string
           start_date: string
@@ -526,7 +541,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           justification: string
-          opt_out_risk: number | null
+          opt_out_risk?: number | null
           raw_apollo_payload?: Json | null
         }
         Update: {
@@ -788,6 +803,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "notifications_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_philanthropy_embeds: {
+        Row: {
+          created_at: string
+          display_order: number
+          embed_type: string
+          id: string
+          organization_id: string
+          title: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          embed_type: string
+          id?: string
+          organization_id: string
+          title: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          embed_type?: string
+          id?: string
+          organization_id?: string
+          title?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_philanthropy_embeds_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1124,7 +1180,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string | null
           email?: string
-          id: string
+          id?: string
           name?: string | null
         }
         Relationships: []
@@ -1386,14 +1442,14 @@ export type Enums<
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Enums"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
+> = DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaTableNameOrOptions]
+    ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
 
 export type CompositeTypes<
@@ -1412,6 +1468,72 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
+// Table type exports
+export type Alumni = Tables<'alumni'>;
+export type Announcement = Tables<'announcements'>;
+export type ClassAction = Tables<'class_actions'>;
+export type ClassActionDoc = Tables<'class_action_docs'>;
+export type ClassActionPersona = Tables<'class_action_personas'>;
+export type Competition = Tables<'competitions'>;
+export type CompetitionPoint = Tables<'competition_points'>;
+export type CompetitionTeam = Tables<'competition_teams'>;
+export type Donation = Tables<'donations'>;
+export type Event = Tables<'events'>;
+export type Lead = Tables<'leads'>;
+export type Member = Tables<'members'>;
+export type MentorshipLog = Tables<'mentorship_logs'>;
+export type MentorshipPair = Tables<'mentorship_pairs'>;
+export type Notification = Tables<'notifications'>;
+export type NotificationPreference = Tables<'notification_preferences'>;
+export type Organization = Tables<'organizations'>;
+export type OrganizationDonation = Tables<'organization_donations'>;
+export type OrganizationInvite = Tables<'organization_invites'>;
+export type OrganizationSubscription = Tables<'organization_subscriptions'>;
+export type PhilanthropyEvent = Tables<'philanthropy_events'>;
+export type Record = Tables<'records'>;
+export type User = Tables<'users'>;
+export type UserOrganizationRole = Tables<'user_organization_roles'>;
+export type Workout = Tables<'workouts'>;
+export type WorkoutLog = Tables<'workout_logs'>;
+
+// Enum type exports
+export type EventType = Enums<'event_type'>;
+export type MemberStatus = Enums<'member_status'>;
+export type MembershipStatus = Enums<'membership_status'>;
+export type UserRole = Enums<'user_role'>;
+
+// Additional type aliases for backward compatibility and convenience
+export type AnnouncementAudience = "all" | "members" | "active_members" | "alumni" | "individuals";
+export type NotificationAudience = "members" | "alumni" | "both";
+export type NotificationChannel = "email" | "sms" | "both";
+export type WorkoutStatus = "not_started" | "in_progress" | "completed";
+export type AlumniBucket = "none" | "0-200" | "201-600" | "601-1500" | "1500+";
+export type SubscriptionInterval = "month" | "year";
+export type EmbedType = "link" | "iframe";
+
+// Embed types (based on component usage)
+export interface PhilanthropyEmbed {
+  id: string;
+  organization_id: string;
+  title: string;
+  url: string;
+  embed_type: "link" | "iframe";
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DonationEmbed {
+  id: string;
+  organization_id: string;
+  title: string;
+  url: string;
+  embed_type: "link" | "iframe";
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export const Constants = {
   public: {

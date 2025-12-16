@@ -61,7 +61,6 @@ export async function POST(_req: Request, { params }: RouteParams) {
     };
 
     const table = "organization_subscriptions" as const;
-    // @ts-expect-error Supabase typings do not yet include organization_subscriptions in generated schema
     await serviceSupabase.from(table).update(payload).eq("organization_id", organizationId);
 
     return NextResponse.json({ status: "canceled" });

@@ -67,7 +67,7 @@ export default function EditAnnouncementPage() {
         title: a.title || "",
         body: a.body || "",
         is_pinned: a.is_pinned || false,
-        audience: a.audience || "all",
+        audience: (a.audience as AnnouncementAudience) || "all",
       });
       setTargetUserIds(a.audience_user_ids || []);
 

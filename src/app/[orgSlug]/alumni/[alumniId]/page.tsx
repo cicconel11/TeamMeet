@@ -179,7 +179,7 @@ export default async function AlumniDetailPage({ params }: AlumniDetailPageProps
             <div>
               <dt className="text-sm text-muted-foreground">Added</dt>
               <dd className="text-foreground font-medium">
-                {new Date(alum.created_at).toLocaleDateString()}
+                {alum.created_at ? new Date(alum.created_at).toLocaleDateString() : "—"}
               </dd>
             </div>
           </dl>

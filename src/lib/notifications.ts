@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, NotificationAudience, NotificationChannel } from "@/types/database";
+import type { Database, NotificationAudience, NotificationChannel, UserRole } from "@/types/database";
 
 export type DeliveryChannel = "email" | "sms";
 
@@ -115,7 +115,7 @@ export async function buildNotificationTargets(params: {
   const { supabase, organizationId, audience, channel, targetUserIds } = params;
   const desired = DESIRED_CHANNELS[channel];
 
-  const audienceRoles =
+  const audienceRoles: readonly UserRole[] =
     audience === "members"
       ? ["admin", "active_member"]
       : audience === "alumni"

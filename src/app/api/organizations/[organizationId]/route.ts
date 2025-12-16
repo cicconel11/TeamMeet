@@ -66,7 +66,8 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
     ];
 
     for (const table of deletionOrder) {
-      await serviceSupabase.from(table).delete().eq("organization_id", organizationId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (serviceSupabase as any).from(table).delete().eq("organization_id", organizationId);
     }
 
     // Finally delete the organization
