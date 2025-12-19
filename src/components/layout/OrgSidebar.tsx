@@ -48,7 +48,7 @@ export function OrgSidebar({ organization, role }: OrgSidebarProps) {
               />
             </div>
           ) : (
-            <div 
+            <div
               className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-lg"
               style={{ backgroundColor: organization.primary_color || "var(--color-org-primary)" }}
             >
@@ -74,11 +74,10 @@ export function OrgSidebar({ organization, role }: OrgSidebarProps) {
               <li key={item.href}>
                 <Link
                   href={href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                    isActive
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
                       ? "bg-org-primary text-white"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />
                   {item.label}
@@ -91,13 +90,15 @@ export function OrgSidebar({ organization, role }: OrgSidebarProps) {
 
       {/* User Section */}
       <div className="p-4 border-t border-border">
-        <Link
-          href="/auth/signout"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
-        >
-          <LogOutIcon className="h-5 w-5" />
-          Sign Out
-        </Link>
+        <form action="/auth/signout" method="POST">
+          <button
+            type="submit"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
+          >
+            <LogOutIcon className="h-5 w-5" />
+            Sign Out
+          </button>
+        </form>
       </div>
     </aside>
   );
