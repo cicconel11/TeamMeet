@@ -109,7 +109,7 @@ export default function ApprovalsPage() {
         setPendingAlumni(normalizedMemberships.filter(m => m.role === "alumni"));
 
         // Get active invites
-        const { data: inviteData, error: inviteError } = await supabase
+        const { data: inviteData } = await supabase
           .from("organization_invites")
           .select("*")
           .eq("organization_id", org.id)

@@ -25,7 +25,7 @@ export default async function AppHomePage({ searchParams }: AppHomePageProps) {
   const { error: errorParam, pending: pendingOrg } = await searchParams;
   const supabase = await createClient();
   // Use getUser() instead of getSession() - validates JWT and refreshes tokens for OAuth
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     redirect("/auth/login");
