@@ -14,6 +14,7 @@ const authOnlyRoutes = ["/", "/auth/login", "/auth/signup"];
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const host = request.headers.get("host");
+  const shouldLog = process.env.NEXT_PUBLIC_LOG_AUTH === "true";
 
   // Bypass Stripe webhook so middleware does not block it
   if (pathname === "/api/stripe/webhook") {
@@ -46,6 +47,27 @@ export async function middleware(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
+        if (shouldLog) {
+          console.log("[AUTH-MW] setAll", {
+            host,
+            pathname,
+            cookieCount: cookiesToSet.length,
+            cookies: cookiesToSet.map(({ name, value, options }) => ({
+              name,
+              valueLen: value?.length ?? 0,
+              options: {
+                path: options.path ?? "/",
+                domain: options.domain,
+                secure: options.secure,
+                sameSite: options.sameSite,
+                maxAge: options.maxAge,
+              },
+            })),
+          });
+        }
+        if (cookiesToSet.length === 0) {
+          return;
+        }
         cookiesToSet.forEach(({ name, value, options }) => {
           const cookieOptions: CookieOptions = {
             ...options,
@@ -81,7 +103,6 @@ export async function middleware(request: NextRequest) {
   const session = user ? { user, expires_at: null } : null;
 
 
-  const shouldLog = process.env.NEXT_PUBLIC_LOG_AUTH === "true";
   const sbCookies = cookiesAll.map((c) => c.name).filter((n) => n.startsWith("sb-"));
   if (shouldLog) {
     console.log("[AUTH-MW]", {
