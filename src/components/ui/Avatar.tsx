@@ -1,4 +1,4 @@
-import { HTMLAttributes } from "react";
+import { HTMLAttributes, useState } from "react";
 import Image from "next/image";
 
 interface AvatarProps extends HTMLAttributes<HTMLDivElement> {
@@ -25,10 +25,12 @@ export function Avatar({ src, alt, name, size = "md", className = "", ...props }
     xl: "h-16 w-16 text-lg",
   };
 
-  if (src) {
+  const [hasError, setHasError] = useState(false);
+
+  if (src && !hasError) {
     return (
       <div
-        className={`${sizes[size]} rounded-full overflow-hidden bg-muted flex-shrink-0 ${className}`}
+        className={`${sizes[size]} rounded-full overflow-hidden bg-muted flex-shrink-0 relative ${className}`}
         {...props}
       >
         <Image
@@ -37,6 +39,7 @@ export function Avatar({ src, alt, name, size = "md", className = "", ...props }
           fill
           className="object-cover"
           sizes="64px"
+          onError={() => setHasError(true)}
         />
       </div>
     );
