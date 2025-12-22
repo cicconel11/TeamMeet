@@ -997,6 +997,7 @@ export type Database = {
           id: string
           logo_url: string | null
           name: string
+          nav_config: Json | null
           primary_color: string | null
           slug: string
           stripe_connect_account_id: string | null
@@ -1008,6 +1009,7 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name: string
+          nav_config?: Json | null
           primary_color?: string | null
           slug: string
           stripe_connect_account_id?: string | null
@@ -1019,6 +1021,7 @@ export type Database = {
           id?: string
           logo_url?: string | null
           name?: string
+          nav_config?: Json | null
           primary_color?: string | null
           slug?: string
           stripe_connect_account_id?: string | null
