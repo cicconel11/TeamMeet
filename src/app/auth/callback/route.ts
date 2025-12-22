@@ -48,7 +48,8 @@ export async function GET(request: NextRequest) {
               path: "/",  // Always use root path for auth cookies
               sameSite: "lax",
               secure: process.env.NODE_ENV === "production",
-              domain: process.env.NODE_ENV === "production" ? ".myteamnetwork.com" : undefined,
+              // Let browser use default domain to avoid iOS Safari ITP issues
+              domain: undefined,
             });
           });
         },

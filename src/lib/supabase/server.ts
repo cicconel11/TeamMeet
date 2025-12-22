@@ -11,7 +11,7 @@ export async function createClient() {
       path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      domain: process.env.NODE_ENV === "production" ? ".myteamnetwork.com" : undefined,
+      domain: undefined,
     },
     cookies: {
       getAll() {
@@ -24,7 +24,7 @@ export async function createClient() {
             const cookieOptions = {
               ...options,
               path: options.path ?? "/",
-              domain: process.env.NODE_ENV === "production" ? ".myteamnetwork.com" : undefined,
+              domain: undefined,
             };
             cookieStore.set(name, value, cookieOptions);
           });

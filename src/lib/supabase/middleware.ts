@@ -17,7 +17,7 @@ export async function updateSession(request: NextRequest) {
       path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      domain: process.env.NODE_ENV === "production" ? ".myteamnetwork.com" : undefined,
+      domain: undefined,
     },
     cookies: {
       getAll() {
@@ -28,7 +28,7 @@ export async function updateSession(request: NextRequest) {
           const cookieOptions: CookieOptions = {
             ...options,
             path: options.path ?? "/",
-            domain: process.env.NODE_ENV === "production" ? ".myteamnetwork.com" : undefined,
+            domain: undefined,
           };
           request.cookies.set({ name, value, ...cookieOptions });
           response.cookies.set({ name, value, ...cookieOptions });

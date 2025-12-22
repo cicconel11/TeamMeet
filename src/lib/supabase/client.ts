@@ -20,7 +20,7 @@ export function createClient() {
       path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      domain: process.env.NODE_ENV === "production" ? ".myteamnetwork.com" : undefined,
+      domain: undefined,
     },
   });
   

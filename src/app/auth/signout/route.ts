@@ -37,7 +37,7 @@ export async function POST(request: Request) {
           response.cookies.set(name, value, {
             ...options,
             path: options.path ?? "/",
-            domain: process.env.NODE_ENV === "production" ? ".myteamnetwork.com" : undefined,
+            domain: undefined,
           });
         });
       },
