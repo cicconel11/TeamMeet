@@ -82,7 +82,7 @@ export default function EditMemberPage() {
       // Fetch system access role
       // We need to look up the user_id from the members table (if it exists) or try to find by email
       // Note: members table has user_id if they are linked
-      const memberWithUser = m as any;
+      const memberWithUser = m as Member & { user_id?: string };
       if (memberWithUser.user_id) {
          const { data: access } = await supabase
            .from("user_organization_roles")
@@ -216,9 +216,6 @@ export default function EditMemberPage() {
     );
   }
 
-  // Determine actual system role based on available data
-  const systemRoleValue = accessData.role || "member";
-  
   return (
     <div className="animate-fade-in">
       <PageHeader
