@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
-import { buildNotificationTargets } from "@/lib/notifications";
-import type { NotificationAudience } from "@/types/database";
+import { createServiceClient } from "@/lib/supabase/service";
+import { buildNotificationTargets, sendEmail as sendEmailStub, sendSMS } from "@/lib/notifications";
+import type { NotificationAudience, NotificationChannel } from "@/types/database";
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -10,19 +11,56 @@ const resend = process.env.RESEND_API_KEY
 
 const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@teamnetwork.app";
 
+const validChannel = (value: string | undefined): NotificationChannel => {
+  if (value === "sms" || value === "both") return value;
+  return "email";
+};
+
+const mapAnnouncementAudience = (audience: string): NotificationAudience => {
+  if (audience === "active_members") return "members";
+  if (audience === "alumni") return "alumni";
+  if (audience === "members") return "members";
+  return "both";
+};
+
+async function sendEmailWithFallback(to: string, subject: string, bodyText: string) {
+  if (resend) {
+    try {
+      const response = await resend.emails.send({
+        from: FROM_EMAIL,
+        to,
+        subject,
+        text: bodyText,
+      });
+
+      if (response.error) {
+        return { success: false, error: response.error.message };
+      }
+
+      return { success: true, messageId: response.data?.id };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: errorMsg };
+    }
+  }
+
+  return sendEmailStub({ to, subject, body: bodyText });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { announcementId, notificationId } = body;
 
-    if (!announcementId && !notificationId) {
+    if (!announcementId && !notificationId && !body.organizationId) {
       return NextResponse.json(
-        { error: "announcementId or notificationId required" },
+        { error: "announcementId, notificationId, or organizationId required" },
         { status: 400 }
       );
     }
 
     const supabase = await createClient();
+    const service = createServiceClient();
 
     // Get current user to verify they're authorized
     const {
@@ -32,19 +70,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let organizationId: string;
-    let title: string;
-    let bodyText: string;
-    let audience: NotificationAudience;
+    let organizationId: string | null = null;
+    let title: string | null = null;
+    let bodyText = "";
+    let audience: NotificationAudience = "both";
+    let channel: NotificationChannel = "email";
     let targetUserIds: string[] | null = null;
+    let resolvedNotificationId: string | null = notificationId ?? null;
+    let persistNotification = true;
 
     if (announcementId) {
-      // Load announcement
-      const { data: announcement, error: announcementError } = await supabase
+      const { data: announcement, error: announcementError } = await service
         .from("announcements")
-        .select("*, organizations(id, name)")
+        .select("id, title, body, organization_id, audience, audience_user_ids")
         .eq("id", announcementId)
-        .single();
+        .maybeSingle();
 
       if (announcementError || !announcement) {
         return NextResponse.json(
@@ -56,24 +96,32 @@ export async function POST(request: Request) {
       organizationId = announcement.organization_id;
       title = announcement.title;
       bodyText = announcement.body || "";
-      
-      // Map announcement audience to notification audience
-      const announcementAudience = announcement.audience as string;
-      audience =
-        announcementAudience === "all" || announcementAudience === "individuals"
-          ? "both"
-          : announcementAudience === "active_members"
-          ? "members"
-          : (announcementAudience as NotificationAudience);
-      
+      audience = mapAnnouncementAudience(announcement.audience as string);
       targetUserIds = announcement.audience_user_ids;
-    } else {
-      // Load notification directly
-      const { data: notification, error: notificationError } = await supabase
+
+      // Try to locate an existing notification created alongside the announcement
+      const { data: existingNotification } = await service
+        .from("notifications")
+        .select("id, channel, audience, target_user_ids")
+        .eq("organization_id", organizationId)
+        .eq("title", announcement.title)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingNotification) {
+        resolvedNotificationId = existingNotification.id;
+        channel = validChannel(existingNotification.channel);
+        audience = (existingNotification.audience as NotificationAudience) || audience;
+        targetUserIds = existingNotification.target_user_ids || targetUserIds;
+      }
+    } else if (notificationId) {
+      const { data: notification, error: notificationError } = await service
         .from("notifications")
         .select("*")
         .eq("id", notificationId)
-        .single();
+        .maybeSingle();
 
       if (notificationError || !notification) {
         return NextResponse.json(
@@ -85,8 +133,26 @@ export async function POST(request: Request) {
       organizationId = notification.organization_id;
       title = notification.title;
       bodyText = notification.body || "";
-      audience = notification.audience as NotificationAudience;
+      audience = (notification.audience as NotificationAudience) || "both";
+      channel = validChannel(notification.channel);
       targetUserIds = notification.target_user_ids;
+    } else {
+      organizationId = body.organizationId;
+      title = body.title;
+      bodyText = body.body || "";
+      const requestedAudience = body.audience as NotificationAudience | undefined;
+      audience = requestedAudience || "both";
+      channel = validChannel(body.channel);
+      targetUserIds = body.targetUserIds ?? null;
+      resolvedNotificationId = body.notificationId ?? null;
+      persistNotification = body.persistNotification !== false;
+    }
+
+    if (!organizationId || !title) {
+      return NextResponse.json(
+        { error: "Missing notification details" },
+        { status: 400 }
+      );
     }
 
     // Verify user is admin of this org
@@ -96,7 +162,7 @@ export async function POST(request: Request) {
       .eq("organization_id", organizationId)
       .eq("user_id", user.id)
       .eq("status", "active")
-      .single();
+      .maybeSingle();
 
     if (!roleData || roleData.role !== "admin") {
       return NextResponse.json(
@@ -105,89 +171,77 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build notification targets
-    const { targets, stats } = await buildNotificationTargets({
-      supabase,
-      organizationId,
-      audience,
-      channel: "email",
-      targetUserIds,
-    });
+    // Ensure we have a notification record to mark as sent (optional)
+    if (!resolvedNotificationId && persistNotification) {
+      const { data: createdNotification } = await service
+        .from("notifications")
+        .insert({
+          organization_id: organizationId,
+          title,
+          body: bodyText || null,
+          channel,
+          audience,
+          target_user_ids: targetUserIds,
+          created_by_user_id: user.id,
+        })
+        .select("id")
+        .maybeSingle();
 
-    if (!resend) {
-      console.log("[DEV] Resend not configured - would send to:", targets.length, "recipients");
-      console.log("[DEV] Stats:", stats);
-      
-      // In development, just log and mark as sent
-      if (notificationId) {
-        await supabase
-          .from("notifications")
-          .update({ sent_at: new Date().toISOString() })
-          .eq("id", notificationId);
+      if (createdNotification?.id) {
+        resolvedNotificationId = createdNotification.id;
       }
-
-      return NextResponse.json({
-        success: true,
-        sent: 0,
-        skipped: targets.length,
-        message: "Resend not configured - running in development mode",
-        stats,
-      });
     }
 
-    // Send emails via Resend
-    let sentCount = 0;
+    // Build notification targets using service client to bypass RLS for preferences
+    const { targets, stats } = await buildNotificationTargets({
+      supabase: service,
+      organizationId,
+      audience,
+      channel,
+      targetUserIds: targetUserIds || undefined,
+    });
+
+    let emailSent = 0;
+    let smsSent = 0;
     const errors: string[] = [];
 
     for (const target of targets) {
-      if (target.email && target.channels.includes("email")) {
-        try {
-          await resend.emails.send({
-            from: FROM_EMAIL,
-            to: target.email,
-            subject: title,
-            text: bodyText,
-            // Could add HTML template here
-          });
-          sentCount++;
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          errors.push(`Failed to send to ${target.email}: ${errorMsg}`);
-          console.error(`Failed to send email to ${target.email}:`, err);
+      if (target.channels.includes("email") && target.email) {
+        const result = await sendEmailWithFallback(target.email, title, bodyText);
+        if (result.success) {
+          emailSent += 1;
+        } else if (result.error) {
+          errors.push(`Email to ${target.email}: ${result.error}`);
+        }
+      }
+
+      if (target.channels.includes("sms") && target.phone) {
+        const smsResult = await sendSMS({
+          to: target.phone,
+          message: `${title}\n\n${bodyText}`,
+        });
+
+        if (smsResult.success) {
+          smsSent += 1;
+        } else if (smsResult.error) {
+          errors.push(`SMS to ${target.phone}: ${smsResult.error}`);
         }
       }
     }
 
     // Update notification record with sent_at
-    if (notificationId) {
-      await supabase
+    if (resolvedNotificationId) {
+      await service
         .from("notifications")
         .update({ sent_at: new Date().toISOString() })
-        .eq("id", notificationId);
-    }
-
-    // If this was triggered by an announcement, also update/create the notification record
-    if (announcementId) {
-      // Check if notification already exists for this announcement
-      const { data: existingNotif } = await supabase
-        .from("notifications")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("title", title)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingNotif) {
-        await supabase
-          .from("notifications")
-          .update({ sent_at: new Date().toISOString() })
-          .eq("id", existingNotif.id);
-      }
+        .eq("id", resolvedNotificationId);
     }
 
     return NextResponse.json({
       success: true,
-      sent: sentCount,
+      sent: emailSent + smsSent,
+      emailSent,
+      smsSent,
       total: targets.length,
       skipped: stats.skippedMissingContact,
       errors: errors.length > 0 ? errors : undefined,
@@ -200,7 +254,4 @@ export async function POST(request: Request) {
     );
   }
 }
-
-
-
 

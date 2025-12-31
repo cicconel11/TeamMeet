@@ -81,6 +81,26 @@ export function MentorshipAdminPanel({ orgId, orgSlug }: MentorshipAdminPanelPro
       return;
     }
 
+    const mentorLabel = mentors.find((m) => m.value === mentorId)?.label || "Mentor";
+    const menteeLabel = mentees.find((m) => m.value === menteeId)?.label || "Mentee";
+
+    try {
+      await fetch("/api/notifications/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId: orgId,
+          title: "New Mentorship Pairing",
+          body: `You've been paired for mentorship.\n\nMentor: ${mentorLabel}\nMentee: ${menteeLabel}`,
+          channel: "both",
+          audience: "both",
+          targetUserIds: [mentorId, menteeId],
+        }),
+      });
+    } catch (notifError) {
+      console.error("Failed to send mentorship pairing notification:", notifError);
+    }
+
     window.location.href = `/${orgSlug}/mentorship`;
   };
 
@@ -117,4 +137,3 @@ export function MentorshipAdminPanel({ orgId, orgSlug }: MentorshipAdminPanelPro
     </Card>
   );
 }
-

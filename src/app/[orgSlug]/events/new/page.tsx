@@ -7,6 +7,7 @@ import { Card, Button, Input, Select, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 
 type Audience = "members" | "alumni" | "both" | "specific";
+type Channel = "email" | "sms" | "both";
 
 type TargetUser = {
   id: string;
@@ -18,6 +19,7 @@ export default function NewEventPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
 
+  const [orgId, setOrgId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userOptions, setUserOptions] = useState<TargetUser[]>([]);
@@ -34,6 +36,7 @@ export default function NewEventPage() {
     is_philanthropy: false,
     audience: "both" as Audience,
     send_notification: true,
+    channel: "email" as Channel,
   });
   const [targetUserIds, setTargetUserIds] = useState<string[]>([]);
 
@@ -47,6 +50,7 @@ export default function NewEventPage() {
         .maybeSingle();
 
       if (!org) return;
+      setOrgId(org.id);
 
       const { data: memberships } = await supabase
         .from("user_organization_roles")
@@ -80,16 +84,19 @@ export default function NewEventPage() {
     setIsLoading(true);
     setError(null);
 
+    if (formData.audience === "specific" && targetUserIds.length === 0) {
+      setError("Select at least one recipient for this notification.");
+      setIsLoading(false);
+      return;
+    }
+
     const supabase = createClient();
 
-    // Get organization ID
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("slug", orgSlug)
-      .single();
+    const orgIdToUse = orgId
+      ? orgId
+      : (await supabase.from("organizations").select("id").eq("slug", orgSlug).maybeSingle()).data?.id;
 
-    if (!org) {
+    if (!orgIdToUse) {
       setError("Organization not found");
       setIsLoading(false);
       return;
@@ -107,7 +114,7 @@ export default function NewEventPage() {
     const targetIds = formData.audience === "specific" ? targetUserIds : null;
 
     const { error: insertError, data: event } = await supabase.from("events").insert({
-      organization_id: org.id,
+      organization_id: orgIdToUse,
       title: formData.title,
       description: formData.description || null,
       start_date: startDateTime,
@@ -128,18 +135,29 @@ export default function NewEventPage() {
 
     // Send notification if enabled
     if (formData.send_notification && event) {
+      const scheduleLine = formData.start_date && formData.start_time
+        ? `When: ${formData.start_date} at ${formData.start_time}`
+        : "";
+      const locationLine = formData.location ? `Where: ${formData.location}` : null;
+      const notificationBody = [formData.description || "", scheduleLine, locationLine]
+        .filter(Boolean)
+        .join("\n\n");
+
       try {
-        await supabase.from("notifications").insert({
-          organization_id: org.id,
-          title: `New Event: ${formData.title}`,
-          body: formData.description || `Event scheduled for ${formData.start_date}`,
-          channel: "email",
-          audience: audienceValue,
-          target_user_ids: targetIds,
-          sent_at: new Date().toISOString(),
+        await fetch("/api/notifications/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId: orgIdToUse,
+            title: `New Event: ${formData.title}`,
+            body: notificationBody || `Event scheduled for ${formData.start_date} at ${formData.start_time}`,
+            channel: formData.channel,
+            audience: audienceValue,
+            targetUserIds: targetIds,
+          }),
         });
       } catch (notifError) {
-        console.error("Failed to create notification record:", notifError);
+        console.error("Failed to send notification:", notifError);
       }
     }
 
@@ -244,6 +262,17 @@ export default function NewEventPage() {
             ]}
           />
 
+          <Select
+            label="Notification Channel"
+            value={formData.channel}
+            onChange={(e) => setFormData({ ...formData, channel: e.target.value as Channel })}
+            options={[
+              { label: "Email", value: "email" },
+              { label: "SMS", value: "sms" },
+              { label: "Email + SMS", value: "both" },
+            ]}
+          />
+
           {formData.audience === "specific" && (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">Select recipients</p>
@@ -284,13 +313,13 @@ export default function NewEventPage() {
               type="checkbox"
               id="send_notification"
               checked={formData.send_notification}
-              onChange={(e) => setFormData({ ...formData, send_notification: e.target.checked })}
-              className="h-4 w-4 rounded border-border text-org-primary focus:ring-org-primary"
-            />
-            <label htmlFor="send_notification" className="text-sm text-foreground">
-              Send push notification to selected audience
-            </label>
-          </div>
+            onChange={(e) => setFormData({ ...formData, send_notification: e.target.checked })}
+            className="h-4 w-4 rounded border-border text-org-primary focus:ring-org-primary"
+          />
+          <label htmlFor="send_notification" className="text-sm text-foreground">
+            Send email or text notification to selected audience
+          </label>
+        </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button type="button" variant="secondary" onClick={() => router.back()}>

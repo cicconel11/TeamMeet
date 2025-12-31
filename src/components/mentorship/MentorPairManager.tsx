@@ -19,6 +19,8 @@ export function MentorPairManager({ orgId, orgSlug }: MentorPairManagerProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pairId, setPairId] = useState<string | null>(null);
+  const [mentorLabel, setMentorLabel] = useState("Mentor");
+  const [initialMenteeId, setInitialMenteeId] = useState<string | null>(null);
   const [status, setStatus] = useState<"active" | "completed" | "paused">("active");
 
   const statusOptions: Array<{ label: string; value: "active" | "completed" | "paused" }> = [
@@ -42,6 +44,11 @@ export function MentorPairManager({ orgId, orgSlug }: MentorPairManagerProps) {
         return;
       }
       setMentorId(user.id);
+      setMentorLabel(
+        (user.user_metadata?.name as string | undefined) ||
+          user.email ||
+          "Mentor"
+      );
 
       const { data: menteeRows, error: menteeError } = await supabase
         .from("user_organization_roles")
@@ -73,6 +80,7 @@ export function MentorPairManager({ orgId, orgSlug }: MentorPairManagerProps) {
       if (pair) {
         setPairId(pair.id);
         setCurrentMenteeId(pair.mentee_user_id);
+        setInitialMenteeId(pair.mentee_user_id);
         const normalizedStatus =
           pair.status === "completed" || pair.status === "paused" ? pair.status : "active";
         setStatus(normalizedStatus);
@@ -89,6 +97,8 @@ export function MentorPairManager({ orgId, orgSlug }: MentorPairManagerProps) {
       setError("Select a mentee to assign.");
       return;
     }
+
+    const shouldNotify = !pairId || currentMenteeId !== initialMenteeId;
 
     setIsSaving(true);
     setError(null);
@@ -115,6 +125,26 @@ export function MentorPairManager({ orgId, orgSlug }: MentorPairManagerProps) {
       setError(upsertError.message);
       setIsSaving(false);
       return;
+    }
+
+    if (shouldNotify && mentorId && currentMenteeId) {
+      const menteeLabel = availableMentees.find((m) => m.value === currentMenteeId)?.label || "Mentee";
+      try {
+        await fetch("/api/notifications/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId: orgId,
+            title: "New Mentorship Pairing",
+            body: `You've been paired for mentorship.\n\nMentor: ${mentorLabel}\nMentee: ${menteeLabel}`,
+            channel: "both",
+            audience: "both",
+            targetUserIds: [mentorId, currentMenteeId],
+          }),
+        });
+      } catch (notifError) {
+        console.error("Failed to send mentorship pairing notification:", notifError);
+      }
     }
 
     setPairId(data?.id ?? pairId);
