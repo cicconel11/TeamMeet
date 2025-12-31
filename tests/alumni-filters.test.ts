@@ -31,37 +31,64 @@ interface AlumniFilters {
   position?: string;
 }
 
+const normalize = (value?: string | null) =>
+  typeof value === "string" ? value.trim().toLowerCase() : null;
+
+const matchesIgnoreCase = (field: string | null, filter: string | null) => {
+  if (!filter) return true;
+  return normalize(field) === filter;
+};
+
+const uniqueCaseInsensitive = (values: Array<string | null>) => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalize(value);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push((value as string).trim());
+  }
+
+  return result;
+};
+
 // Filter function that mirrors the server-side logic
 function filterAlumni(alumni: MockAlumni[], filters: AlumniFilters): MockAlumni[] {
+  const industryFilter = normalize(filters.industry);
+  const companyFilter = normalize(filters.company);
+  const cityFilter = normalize(filters.city);
+  const positionFilter = normalize(filters.position);
+
   return alumni.filter((alum) => {
     // Exclude soft-deleted records
     if (alum.deleted_at !== null) return false;
-    
+
     // Apply year filter
     if (filters.year && alum.graduation_year !== parseInt(filters.year)) {
       return false;
     }
-    
+
     // Apply industry filter
-    if (filters.industry && alum.industry !== filters.industry) {
+    if (!matchesIgnoreCase(alum.industry, industryFilter)) {
       return false;
     }
-    
+
     // Apply company filter
-    if (filters.company && alum.current_company !== filters.company) {
+    if (!matchesIgnoreCase(alum.current_company, companyFilter)) {
       return false;
     }
-    
+
     // Apply city filter
-    if (filters.city && alum.current_city !== filters.city) {
+    if (!matchesIgnoreCase(alum.current_city, cityFilter)) {
       return false;
     }
-    
+
     // Apply position filter
-    if (filters.position && alum.position_title !== filters.position) {
+    if (!matchesIgnoreCase(alum.position_title, positionFilter)) {
       return false;
     }
-    
+
     return true;
   });
 }
@@ -72,10 +99,10 @@ function getFilterOptions(alumni: MockAlumni[]) {
   
   return {
     years: [...new Set(activeAlumni.map((a) => a.graduation_year).filter(Boolean))].sort((a, b) => (b || 0) - (a || 0)),
-    industries: [...new Set(activeAlumni.map((a) => a.industry).filter(Boolean))].sort(),
-    companies: [...new Set(activeAlumni.map((a) => a.current_company).filter(Boolean))].sort(),
-    cities: [...new Set(activeAlumni.map((a) => a.current_city).filter(Boolean))].sort(),
-    positions: [...new Set(activeAlumni.map((a) => a.position_title).filter(Boolean))].sort(),
+    industries: uniqueCaseInsensitive(activeAlumni.map((a) => a.industry)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    companies: uniqueCaseInsensitive(activeAlumni.map((a) => a.current_company)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    cities: uniqueCaseInsensitive(activeAlumni.map((a) => a.current_city)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    positions: uniqueCaseInsensitive(activeAlumni.map((a) => a.position_title)).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
   };
 }
 
@@ -134,6 +161,19 @@ describe("Alumni Filters", () => {
       deleted_at: null,
     },
     {
+      id: "6",
+      organization_id: "org-1",
+      first_name: "Case",
+      last_name: "Match",
+      email: "case@example.com",
+      graduation_year: 2020,
+      industry: "technology",
+      current_company: "google",
+      current_city: "san francisco",
+      position_title: "software engineer",
+      deleted_at: null,
+    },
+    {
       id: "5",
       organization_id: "org-1",
       first_name: "Deleted",
@@ -151,7 +191,7 @@ describe("Alumni Filters", () => {
   describe("filterAlumni", () => {
     it("should return all non-deleted alumni with no filters", () => {
       const result = filterAlumni(mockAlumni, {});
-      expect(result).toHaveLength(4);
+      expect(result).toHaveLength(5);
       expect(result.find((a) => a.id === "5")).toBeUndefined();
     });
 
@@ -163,26 +203,26 @@ describe("Alumni Filters", () => {
 
     it("should filter by industry", () => {
       const result = filterAlumni(mockAlumni, { industry: "Technology" });
-      expect(result).toHaveLength(2);
-      expect(result.every((a) => a.industry === "Technology")).toBe(true);
+      expect(result).toHaveLength(3);
+      expect(result.every((a) => a.industry?.toLowerCase() === "technology")).toBe(true);
     });
 
     it("should filter by company", () => {
       const result = filterAlumni(mockAlumni, { company: "Google" });
-      expect(result).toHaveLength(1);
-      expect(result[0].first_name).toBe("John");
+      expect(result).toHaveLength(2);
+      expect(result.map((a) => a.first_name)).toEqual(expect.arrayContaining(["John", "Case"]));
     });
 
     it("should filter by city", () => {
       const result = filterAlumni(mockAlumni, { city: "San Francisco" });
-      expect(result).toHaveLength(2);
-      expect(result.every((a) => a.current_city === "San Francisco")).toBe(true);
+      expect(result).toHaveLength(3);
+      expect(result.every((a) => a.current_city?.toLowerCase() === "san francisco")).toBe(true);
     });
 
     it("should filter by position", () => {
       const result = filterAlumni(mockAlumni, { position: "Software Engineer" });
-      expect(result).toHaveLength(2);
-      expect(result.every((a) => a.position_title === "Software Engineer")).toBe(true);
+      expect(result).toHaveLength(3);
+      expect(result.every((a) => a.position_title?.toLowerCase() === "software engineer")).toBe(true);
     });
 
     it("should combine multiple filters with AND logic", () => {
@@ -190,7 +230,7 @@ describe("Alumni Filters", () => {
         year: "2020",
         industry: "Technology",
       });
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
     });
 
     it("should combine all filters", () => {
@@ -200,8 +240,8 @@ describe("Alumni Filters", () => {
         city: "San Francisco",
         position: "Software Engineer",
       });
-      expect(result).toHaveLength(1);
-      expect(result[0].first_name).toBe("John");
+      expect(result).toHaveLength(2);
+      expect(result.map((a) => a.first_name)).toEqual(expect.arrayContaining(["John", "Case"]));
     });
 
     it("should return empty array when no matches", () => {
@@ -216,8 +256,17 @@ describe("Alumni Filters", () => {
         year: "2020",
         company: "Google",
       });
-      expect(result).toHaveLength(1);
-      expect(result[0].first_name).toBe("John");
+      expect(result).toHaveLength(2);
+      expect(result.map((a) => a.first_name)).toEqual(expect.arrayContaining(["John", "Case"]));
+    });
+
+    it("should match filters regardless of casing", () => {
+      const result = filterAlumni(mockAlumni, {
+        company: "GOOGLE",
+        city: "SAN FRANCISCO",
+      });
+      expect(result).toHaveLength(2);
+      expect(result.map((a) => a.first_name)).toEqual(expect.arrayContaining(["John", "Case"]));
     });
   });
 
@@ -250,6 +299,13 @@ describe("Alumni Filters", () => {
     it("should exclude deleted records from filter options", () => {
       // The deleted user would add an extra "Google" and "San Francisco" if included
       const options = getFilterOptions(mockAlumni);
+      expect(options.companies.filter((c) => c === "Google")).toHaveLength(1);
+    });
+
+    it("should group duplicate values with different casing into a single option", () => {
+      const options = getFilterOptions(mockAlumni);
+      expect(options.industries).toEqual(["Finance", "Healthcare", "Technology"]);
+      expect(options.companies).toContain("Google");
       expect(options.companies.filter((c) => c === "Google")).toHaveLength(1);
     });
   });
@@ -290,7 +346,5 @@ describe("Alumni Filters", () => {
     });
   });
 });
-
-
 
 

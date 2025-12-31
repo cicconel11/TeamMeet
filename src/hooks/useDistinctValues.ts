@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { uniqueStringsCaseInsensitive } from "@/lib/string-utils";
 
 interface UseDistinctValuesOptions {
   orgId: string;
@@ -35,7 +36,7 @@ export function useDistinctValues({
 
     try {
       const supabase = createClient();
-      
+
       // Fetch all non-null values for the column
       const { data, error: fetchError } = await supabase
         .from(table)
@@ -48,11 +49,9 @@ export function useDistinctValues({
       }
 
       // Get unique values and filter out empty strings
-      const uniqueValues = [...new Set(
-        (data || [])
-          .map((row) => (row as unknown as Record<string, unknown>)[column])
-          .filter((v): v is string => typeof v === "string" && v.trim() !== "")
-      )].sort();
+      const uniqueValues = uniqueStringsCaseInsensitive(
+        (data || []).map((row) => (row as unknown as Record<string, unknown>)[column] as string | null)
+      ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 
       setValues(uniqueValues);
     } catch (e) {
@@ -110,7 +109,7 @@ export function useGraduationYears(orgId: string, enabled = true) {
 
     try {
       const supabase = createClient();
-      
+
       const { data, error: fetchError } = await supabase
         .from("alumni")
         .select("graduation_year")
@@ -148,4 +147,3 @@ export function useGraduationYears(orgId: string, enabled = true) {
     refetch: fetchYears,
   };
 }
-

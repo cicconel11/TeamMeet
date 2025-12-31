@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { Button, Select } from "@/components/ui";
+import { uniqueStringsCaseInsensitive } from "@/lib/string-utils";
 
 interface FilterOption {
   value: string;
@@ -67,6 +68,11 @@ export function AlumniFilters({
     });
   };
 
+  const sortStrings = (values: (string | null)[]) =>
+    uniqueStringsCaseInsensitive(values).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    );
+
   const yearOptions: FilterOption[] = [
     { value: "", label: "All Years" },
     ...years
@@ -77,34 +83,22 @@ export function AlumniFilters({
 
   const industryOptions: FilterOption[] = [
     { value: "", label: "All Industries" },
-    ...industries
-      .filter((i): i is string => i !== null && i.trim() !== "")
-      .sort()
-      .map((i) => ({ value: i, label: i })),
+    ...sortStrings(industries).map((i) => ({ value: i, label: i })),
   ];
 
   const companyOptions: FilterOption[] = [
     { value: "", label: "All Companies" },
-    ...companies
-      .filter((c): c is string => c !== null && c.trim() !== "")
-      .sort()
-      .map((c) => ({ value: c, label: c })),
+    ...sortStrings(companies).map((c) => ({ value: c, label: c })),
   ];
 
   const cityOptions: FilterOption[] = [
     { value: "", label: "All Cities" },
-    ...cities
-      .filter((c): c is string => c !== null && c.trim() !== "")
-      .sort()
-      .map((c) => ({ value: c, label: c })),
+    ...sortStrings(cities).map((c) => ({ value: c, label: c })),
   ];
 
   const positionOptions: FilterOption[] = [
     { value: "", label: "All Positions" },
-    ...positions
-      .filter((p): p is string => p !== null && p.trim() !== "")
-      .sort()
-      .map((p) => ({ value: p, label: p })),
+    ...sortStrings(positions).map((p) => ({ value: p, label: p })),
   ];
 
   return (
@@ -177,4 +171,3 @@ export function AlumniFilters({
     </div>
   );
 }
-

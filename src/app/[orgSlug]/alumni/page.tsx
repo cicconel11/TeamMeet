@@ -4,6 +4,7 @@ import { Card, Badge, Avatar, Button, EmptyState } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { AlumniFilters } from "@/components/alumni";
 import { isOrgAdmin } from "@/lib/auth";
+import { uniqueStringsCaseInsensitive } from "@/lib/string-utils";
 
 interface AlumniPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -20,6 +21,8 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
   const { orgSlug } = await params;
   const filters = await searchParams;
   const supabase = await createClient();
+
+  const normalize = (value?: string) => value?.trim() || "";
 
   // Fetch organization
   const { data: orgs, error: orgError } = await supabase
@@ -46,17 +49,21 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
   if (filters.year) {
     query = query.eq("graduation_year", parseInt(filters.year));
   }
-  if (filters.industry) {
-    query = query.eq("industry", filters.industry);
+  const industry = normalize(filters.industry);
+  if (industry) {
+    query = query.ilike("industry", industry);
   }
-  if (filters.company) {
-    query = query.eq("current_company", filters.company);
+  const company = normalize(filters.company);
+  if (company) {
+    query = query.ilike("current_company", company);
   }
-  if (filters.city) {
-    query = query.eq("current_city", filters.city);
+  const city = normalize(filters.city);
+  if (city) {
+    query = query.ilike("current_city", city);
   }
-  if (filters.position) {
-    query = query.eq("position_title", filters.position);
+  const position = normalize(filters.position);
+  if (position) {
+    query = query.ilike("position_title", position);
   }
 
   const { data: alumni } = await query;
@@ -69,10 +76,18 @@ export default async function AlumniPage({ params, searchParams }: AlumniPagePro
     .is("deleted_at", null);
 
   const years = [...new Set(allAlumni?.map((a) => a.graduation_year).filter(Boolean))];
-  const industries = [...new Set(allAlumni?.map((a) => a.industry).filter(Boolean))];
-  const companies = [...new Set(allAlumni?.map((a) => a.current_company).filter(Boolean))];
-  const cities = [...new Set(allAlumni?.map((a) => a.current_city).filter(Boolean))];
-  const positions = [...new Set(allAlumni?.map((a) => a.position_title).filter(Boolean))];
+  const industries = uniqueStringsCaseInsensitive(allAlumni?.map((a) => a.industry) ?? []).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
+  const companies = uniqueStringsCaseInsensitive(allAlumni?.map((a) => a.current_company) ?? []).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
+  const cities = uniqueStringsCaseInsensitive(allAlumni?.map((a) => a.current_city) ?? []).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
+  const positions = uniqueStringsCaseInsensitive(allAlumni?.map((a) => a.position_title) ?? []).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
 
   const hasActiveFilters =
     filters.year || filters.industry || filters.company || filters.city || filters.position;
