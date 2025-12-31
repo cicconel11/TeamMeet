@@ -21,7 +21,6 @@ export default async function DonationsPage({ params, searchParams }: DonationsP
   const org = orgCtx.organization;
 
   const canEdit = canEditNavItem(org.nav_config as NavConfig, "/donations", orgCtx.role, ["admin"]);
-  const isAdmin = orgCtx.role === "admin";
   const supabase = await createClient();
 
   // Fetch donation embeds
