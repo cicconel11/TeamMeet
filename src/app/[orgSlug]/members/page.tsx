@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Badge, Avatar, Button, EmptyState } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { isOrgAdmin } from "@/lib/auth";
+import { MembersFilter } from "@/components/members/MembersFilter";
 
 interface MembersPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -79,39 +80,12 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-6">
-        <Link
-          href={`/${orgSlug}/members`}
-          className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-            !filters.status || filters.status === "active"
-              ? "bg-org-primary text-white"
-              : "bg-muted text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Active
-        </Link>
-        <Link
-          href={`/${orgSlug}/members?status=inactive`}
-          className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-            filters.status === "inactive"
-              ? "bg-org-primary text-white"
-              : "bg-muted text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Inactive
-        </Link>
-        {roles.map((role) => (
-          <Link
-            key={role}
-            href={`/${orgSlug}/members?role=${encodeURIComponent(role!)}`}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-              filters.role === role
-                ? "bg-org-primary text-white"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {role}
-          </Link>
-        ))}
+        <MembersFilter
+          orgSlug={orgSlug}
+          currentStatus={filters.status}
+          currentRole={filters.role}
+          roles={roles}
+        />
       </div>
 
       {/* Members Grid */}
@@ -172,4 +146,3 @@ export default async function MembersPage({ params, searchParams }: MembersPageP
     </div>
   );
 }
-
