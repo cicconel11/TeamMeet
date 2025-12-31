@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, getConnectAccountStatus } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +59,11 @@ export async function POST(req: Request) {
 
   if (!org.stripe_connect_account_id) {
     return NextResponse.json({ error: "Stripe is not connected for this organization" }, { status: 400 });
+  }
+
+  const connectStatus = await getConnectAccountStatus(org.stripe_connect_account_id);
+  if (!connectStatus.isReady) {
+    return NextResponse.json({ error: "Stripe onboarding is not completed for this organization" }, { status: 400 });
   }
 
   if (body.eventId) {

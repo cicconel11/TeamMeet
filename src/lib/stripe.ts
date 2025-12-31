@@ -86,6 +86,40 @@ export function isSalesLedBucket(bucket: AlumniBucket) {
 
 export const STRIPE_PUBLISHABLE_KEY = stripePublishableKey;
 
+export type ConnectAccountStatus = {
+  isReady: boolean;
+  detailsSubmitted: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  disabledReason: string | null;
+};
+
+export async function getConnectAccountStatus(accountId: string): Promise<ConnectAccountStatus> {
+  try {
+    const account = await stripe.accounts.retrieve(accountId);
+    const detailsSubmitted = Boolean(account.details_submitted);
+    const chargesEnabled = Boolean(account.charges_enabled);
+    const payoutsEnabled = Boolean(account.payouts_enabled);
+
+    return {
+      isReady: detailsSubmitted && chargesEnabled && payoutsEnabled,
+      detailsSubmitted,
+      chargesEnabled,
+      payoutsEnabled,
+      disabledReason: account.requirements?.disabled_reason ?? null,
+    };
+  } catch (error) {
+    console.error("[stripe] Unable to retrieve connect account status", error);
+    return {
+      isReady: false,
+      detailsSubmitted: false,
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      disabledReason: "lookup_failed",
+    };
+  }
+}
+
 const shouldLogEnvAudit = process.env.NODE_ENV !== "production";
 let envAuditLogged = false;
 
@@ -98,5 +132,4 @@ if (shouldLogEnvAudit && !envAuditLogged) {
   console.info("✅ Supabase keys loaded successfully");
   envAuditLogged = true;
 }
-
 

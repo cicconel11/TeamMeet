@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout";
 import { DonationForm, ConnectSetup } from "@/components/donations";
 import { getOrgContext } from "@/lib/auth/roles";
 import { canEditNavItem } from "@/lib/navigation/permissions";
+import { getConnectAccountStatus } from "@/lib/stripe";
 import type { NavConfig } from "@/lib/navigation/nav-items";
 import type { OrganizationDonation, OrganizationDonationStat } from "@/types/database";
 
@@ -40,11 +41,15 @@ export default async function DonationsPage({ params }: DonationsPageProps) {
       .order("start_date"),
   ]);
 
+  const connectStatus = org.stripe_connect_account_id
+    ? await getConnectAccountStatus(org.stripe_connect_account_id)
+    : null;
+
   const stats = (donationStats || null) as OrganizationDonationStat | null;
   const donationRows = (donations || []) as OrganizationDonation[];
   const eventsForForm = (philanthropyEvents || []) as { id: string; title: string }[];
 
-  const isConnected = Boolean(org.stripe_connect_account_id);
+  const isConnected = Boolean(connectStatus?.isReady);
   const totalAmount = (stats?.total_amount_cents ?? 0) / 100;
   const donationCount = stats?.donation_count ?? donationRows.length;
   const avgDonation = donationCount > 0 ? totalAmount / donationCount : 0;

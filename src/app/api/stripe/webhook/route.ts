@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { stripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireEnv } from "@/lib/env";
-import type { Database } from "@/types/database";
+import type { AlumniBucket, Database, SubscriptionInterval } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -126,6 +126,140 @@ export async function POST(req: Request) {
     });
   };
 
+  type OrgMetadata = {
+    organizationId: string | null;
+    organizationSlug: string | null;
+    organizationName: string | null;
+    organizationDescription: string | null;
+    organizationColor: string | null;
+    createdBy: string | null;
+    baseInterval: SubscriptionInterval;
+    alumniBucket: AlumniBucket;
+  };
+
+  const normalizeInterval = (value?: string | null): SubscriptionInterval =>
+    value === "year" ? "year" : "month";
+
+  const normalizeBucket = (value?: string | null): AlumniBucket => {
+    const allowed: AlumniBucket[] = ["none", "0-200", "201-600", "601-1500", "1500+"];
+    return allowed.includes(value as AlumniBucket) ? (value as AlumniBucket) : "none";
+  };
+
+  const parseOrgMetadata = (metadata?: Stripe.Metadata | null): OrgMetadata => ({
+    organizationId: (metadata?.organization_id as string | undefined) ?? null,
+    organizationSlug: (metadata?.organization_slug as string | undefined) ?? null,
+    organizationName: (metadata?.organization_name as string | undefined) ?? null,
+    organizationDescription: (metadata?.organization_description as string | undefined) ?? null,
+    organizationColor: (metadata?.organization_color as string | undefined) ?? null,
+    createdBy: (metadata?.created_by as string | undefined) ?? null,
+    baseInterval: normalizeInterval((metadata?.base_interval as string | undefined) ?? null),
+    alumniBucket: normalizeBucket((metadata?.alumni_bucket as string | undefined) ?? null),
+  });
+
+  const ensureOrganizationFromMetadata = async (metadata: OrgMetadata) => {
+    if (!metadata.organizationId && !metadata.organizationSlug) return null;
+
+    if (metadata.organizationId) {
+      const { data: existingById } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("id", metadata.organizationId)
+        .maybeSingle();
+      if (existingById?.id) return existingById.id;
+    }
+
+    if (metadata.organizationSlug) {
+      const { data: existingBySlug } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("slug", metadata.organizationSlug)
+        .maybeSingle();
+      if (existingBySlug?.id) return existingBySlug.id;
+    }
+
+    if (!metadata.organizationName || !metadata.organizationSlug) {
+      console.warn("[stripe-webhook] Missing organization name/slug in metadata; cannot provision org");
+      return null;
+    }
+
+    const { data: org, error: orgInsertError } = await supabase
+      .from("organizations")
+      .insert({
+        id: metadata.organizationId ?? undefined,
+        name: metadata.organizationName,
+        slug: metadata.organizationSlug,
+        description: metadata.organizationDescription || null,
+        primary_color: metadata.organizationColor || "#1e3a5f",
+      })
+      .select("id")
+      .single();
+
+    if (orgInsertError || !org) {
+      console.error("[stripe-webhook] Failed to provision organization from metadata", orgInsertError);
+      return null;
+    }
+
+    if (metadata.createdBy) {
+      await supabase
+        .from("user_organization_roles")
+        .upsert(
+          {
+            user_id: metadata.createdBy,
+            organization_id: org.id,
+            role: "admin",
+            status: "active",
+          },
+          { onConflict: "organization_id,user_id" },
+        );
+    }
+
+    return org.id;
+  };
+
+  const ensureSubscriptionSeed = async (orgId: string, metadata: OrgMetadata) => {
+    const baseInterval = metadata.baseInterval || "month";
+    const alumniBucket = metadata.alumniBucket || "none";
+    const alumniPlanInterval = alumniBucket === "none" || alumniBucket === "1500+" ? null : baseInterval;
+
+    const { data: existing } = await orgSubs()
+      .select("id")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const payload = {
+        base_plan_interval: baseInterval,
+        alumni_bucket: alumniBucket,
+        alumni_plan_interval: alumniPlanInterval,
+        status: "pending",
+        updated_at: new Date().toISOString(),
+      } satisfies Database["public"]["Tables"]["organization_subscriptions"]["Update"];
+
+      await orgSubs()
+        .update(payload)
+        .eq("organization_id", orgId);
+    } else {
+      const insertPayload = {
+        organization_id: orgId,
+        base_plan_interval: baseInterval,
+        alumni_bucket: alumniBucket,
+        alumni_plan_interval: alumniPlanInterval,
+        status: "pending",
+      } satisfies Database["public"]["Tables"]["organization_subscriptions"]["Insert"];
+
+      await orgSubs().insert(insertPayload);
+    }
+  };
+
+  const resolveOrgForSubscriptionFlow = async (metadata: Stripe.Metadata | null | undefined) => {
+    const parsed = parseOrgMetadata(metadata);
+    const organizationId = await ensureOrganizationFromMetadata(parsed);
+    if (organizationId) {
+      await ensureSubscriptionSeed(organizationId, parsed);
+    }
+    return { organizationId, parsed };
+  };
+
   type SubscriptionWithPeriod = Stripe.Subscription & { current_period_end?: number | null };
   type InvoiceWithSub = Stripe.Invoice & {
     subscription?: string | Stripe.Subscription | null;
@@ -135,8 +269,6 @@ export async function POST(req: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
-      const organizationId = session.metadata?.organization_id;
-      console.log("[stripe-webhook] checkout.session.completed - org:", organizationId, "session:", session.id);
       const subscriptionId =
         typeof session.subscription === "string"
           ? session.subscription
@@ -144,8 +276,19 @@ export async function POST(req: Request) {
       const customerId =
         typeof session.customer === "string" ? session.customer : session.customer?.id || null;
 
+      console.log("[stripe-webhook] checkout.session.completed - org:", session.metadata?.organization_id, "session:", session.id);
+
       if (session.mode === "subscription" || subscriptionId) {
-        if (!organizationId) break;
+        if (session.payment_status !== "paid") {
+          console.warn("[stripe-webhook] Checkout completed without payment; skipping org provisioning");
+          break;
+        }
+
+        const { organizationId } = await resolveOrgForSubscriptionFlow(session.metadata);
+        if (!organizationId) {
+          console.warn("[stripe-webhook] Missing organization info for checkout.session.completed");
+          break;
+        }
 
         let status = session.status || "completed";
         let currentPeriodEnd: string | null = null;
@@ -169,7 +312,10 @@ export async function POST(req: Request) {
           current_period_end: currentPeriodEnd,
         });
         console.log("[stripe-webhook] Subscription updated successfully for org:", organizationId);
-      } else if (session.mode === "payment" && organizationId) {
+      } else if (session.mode === "payment") {
+        const donationOrgId = session.metadata?.organization_id;
+        if (!donationOrgId) break;
+
         const paymentIntentId =
           typeof session.payment_intent === "string"
             ? session.payment_intent
@@ -177,7 +323,7 @@ export async function POST(req: Request) {
         const amountCents = session.amount_total ?? session.amount_subtotal ?? 0;
 
         await upsertDonationRecord({
-          organizationId,
+          organizationId: donationOrgId,
           paymentIntentId,
           checkoutSessionId: session.id,
           amountCents: amountCents ?? 0,
@@ -206,11 +352,24 @@ export async function POST(req: Request) {
         : null;
       const status = subscription.status || "canceled";
 
-      await updateBySubscriptionId(subscription.id, {
-        status,
-        current_period_end: currentPeriodEnd,
-        stripe_customer_id: customerId,
-      });
+      const shouldProvision = status !== "incomplete" && status !== "incomplete_expired";
+      const { organizationId } = shouldProvision
+        ? await resolveOrgForSubscriptionFlow(subscription.metadata)
+        : { organizationId: null };
+      if (organizationId) {
+        await updateByOrgId(organizationId, {
+          stripe_subscription_id: subscription.id,
+          stripe_customer_id: customerId,
+          status,
+          current_period_end: currentPeriodEnd,
+        });
+      } else {
+        await updateBySubscriptionId(subscription.id, {
+          status,
+          current_period_end: currentPeriodEnd,
+          stripe_customer_id: customerId,
+        });
+      }
       break;
     }
     case "invoice.paid": {

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { stripe, getPriceIds, isSalesLedBucket } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
@@ -73,63 +74,102 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Slug is already taken" }, { status: 409 });
   }
 
-  let organizationId: string | null = null;
+  if (isSalesLedBucket(bucket)) {
+    let organizationId: string | null = null;
 
-  try {
-    const { data: org, error: orgError } = await supabase
-      .from("organizations")
-      .insert({
-        name,
-        slug,
-        description: description || null,
-        primary_color: primaryColor || "#1e3a5f",
-      })
-      .select()
-      .single();
+    try {
+      const { data: org, error: orgError } = await supabase
+        .from("organizations")
+        .insert({
+          name,
+          slug,
+          description: description || null,
+          primary_color: primaryColor || "#1e3a5f",
+        })
+        .select()
+        .single();
 
-    if (orgError || !org) {
-      throw new Error(orgError?.message || "Unable to create organization");
-    }
+      if (orgError || !org) {
+        throw new Error(orgError?.message || "Unable to create organization");
+      }
 
-    organizationId = org.id;
+      organizationId = org.id;
 
-    const { error: roleError } = await supabase
-      .from("user_organization_roles")
-      .insert({
-        user_id: user.id,
-        organization_id: org.id,
-        role: "admin",
-      });
+      const { error: roleError } = await supabase
+        .from("user_organization_roles")
+        .insert({
+          user_id: user.id,
+          organization_id: org.id,
+          role: "admin",
+        });
 
-    if (roleError) {
-      throw new Error(roleError.message);
-    }
+      if (roleError) {
+        throw new Error(roleError.message);
+      }
 
-    const initialStatus = isSalesLedBucket(bucket) ? "pending_sales" : "pending";
-    const { error: subError } = await supabase
-      .from("organization_subscriptions")
-      .insert({
-        organization_id: org.id,
-        base_plan_interval: interval,
-        alumni_bucket: bucket,
-        alumni_plan_interval: bucket === "none" || bucket === "1500+" ? null : interval,
-        status: initialStatus,
-      });
+      const { error: subError } = await supabase
+        .from("organization_subscriptions")
+        .insert({
+          organization_id: org.id,
+          base_plan_interval: interval,
+          alumni_bucket: bucket,
+          alumni_plan_interval: null,
+          status: "pending_sales",
+        });
 
-    if (subError) {
-      throw new Error(subError.message);
-    }
+      if (subError) {
+        throw new Error(subError.message);
+      }
 
-    if (isSalesLedBucket(bucket)) {
       return NextResponse.json({
         mode: "sales",
         organizationSlug: org.slug,
       });
-    }
+    } catch (error) {
+      const stripeErr = error as {
+        type?: string;
+        code?: string;
+        message?: string;
+        param?: string;
+        statusCode?: number;
+        raw?: { message?: string };
+      };
+      console.error("[create-org-checkout] Error details (sales-led):", {
+        type: stripeErr?.type,
+        code: stripeErr?.code,
+        param: stripeErr?.param,
+        statusCode: stripeErr?.statusCode,
+        message: stripeErr?.message || stripeErr?.raw?.message || (error instanceof Error ? error.message : String(error)),
+      });
 
+      if (organizationId) {
+        console.log("[create-org-checkout] Cleaning up org:", organizationId);
+        await supabase.from("organization_subscriptions").delete().eq("organization_id", organizationId);
+        await supabase.from("user_organization_roles").delete().eq("organization_id", organizationId).eq("user_id", user.id);
+        await supabase.from("organizations").delete().eq("id", organizationId);
+      }
+
+      const message = error instanceof Error ? error.message : "Unable to start checkout";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  }
+
+  try {
     const { basePrice, alumniPrice } = getPriceIds(interval, bucket);
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;
-    console.log("[create-org-checkout] Creating Stripe session with prices:", { basePrice, alumniPrice, origin });
+    const pendingOrgId = randomUUID();
+    const metadata = {
+      organization_id: pendingOrgId,
+      organization_slug: slug,
+      organization_name: name,
+      organization_description: (description || "").slice(0, 500),
+      organization_color: primaryColor || "#1e3a5f",
+      alumni_bucket: bucket,
+      created_by: user.id,
+      base_interval: interval,
+    };
+
+    console.log("[create-org-checkout] Creating Stripe session with prices:", { basePrice, alumniPrice, origin, pendingOrgId });
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -139,36 +179,16 @@ export async function POST(req: Request) {
         ...(alumniPrice ? [{ price: alumniPrice, quantity: 1 }] : []),
       ],
       subscription_data: {
-        metadata: {
-          organization_id: org.id,
-          organization_slug: org.slug,
-          alumni_bucket: bucket,
-          created_by: user.id,
-          base_interval: interval,
-        },
+        metadata,
       },
-      metadata: {
-        organization_id: org.id,
-        organization_slug: org.slug,
-        alumni_bucket: bucket,
-        created_by: user.id,
-        base_interval: interval,
-      },
-      success_url: `${origin}/app?org=${org.slug}&checkout=success`,
-      cancel_url: `${origin}/app?org=${org.slug}&checkout=cancel`,
+      metadata,
+      success_url: `${origin}/app?org=${slug}&checkout=success`,
+      cancel_url: `${origin}/app?org=${slug}&checkout=cancel`,
     });
-
-    if (typeof session.customer === "string") {
-      await supabase
-        .from("organization_subscriptions")
-        .update({ stripe_customer_id: session.customer })
-        .eq("organization_id", org.id);
-    }
 
     console.log("[create-org-checkout] Success! Checkout URL:", session.url);
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    // Enhanced Stripe error logging
     const stripeErr = error as {
       type?: string;
       code?: string;
@@ -184,17 +204,8 @@ export async function POST(req: Request) {
       statusCode: stripeErr?.statusCode,
       message: stripeErr?.message || stripeErr?.raw?.message || (error instanceof Error ? error.message : String(error)),
     });
-    
-    if (organizationId) {
-      // Best-effort cleanup on failure
-      console.log("[create-org-checkout] Cleaning up org:", organizationId);
-      await supabase.from("organization_subscriptions").delete().eq("organization_id", organizationId);
-      await supabase.from("user_organization_roles").delete().eq("organization_id", organizationId).eq("user_id", user.id);
-      await supabase.from("organizations").delete().eq("id", organizationId);
-    }
-    
+
     const message = error instanceof Error ? error.message : "Unable to start checkout";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
-

@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout";
 import { DonationForm, ConnectSetup } from "@/components/donations";
 import { getOrgContext } from "@/lib/auth/roles";
 import { canEditNavItem } from "@/lib/navigation/permissions";
+import { getConnectAccountStatus } from "@/lib/stripe";
 import type { NavConfig } from "@/lib/navigation/nav-items";
 import type { OrganizationDonationStat } from "@/types/database";
 import { PhilanthropyFilter } from "@/components/philanthropy/PhilanthropyFilter";
@@ -57,7 +58,10 @@ export default async function PhilanthropyPage({ params, searchParams }: Philant
   const upcomingCount = allPhilanthropyEvents?.filter((e) => new Date(e.start_date) >= new Date()).length || 0;
   const pastCount = totalEvents - upcomingCount;
   const eventsForForm = (allPhilanthropyEvents || []).map((evt) => ({ id: evt.id, title: evt.title }));
-  const isConnected = Boolean(org.stripe_connect_account_id);
+  const connectStatus = org.stripe_connect_account_id
+    ? await getConnectAccountStatus(org.stripe_connect_account_id)
+    : null;
+  const isConnected = Boolean(connectStatus?.isReady);
 
   return (
     <div className="animate-fade-in">
