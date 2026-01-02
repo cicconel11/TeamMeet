@@ -11,7 +11,7 @@ export async function registerStripeEvent(params: {
   supabase: DbClient;
   eventId: string;
   type: string;
-  payload?: Record<string, unknown> | null;
+  payload?: StripeEventInsert["payload_json"];
 }) {
   const { supabase, eventId, type, payload } = params;
 
@@ -62,4 +62,3 @@ export async function markStripeEventProcessed(
   if (error) throw error;
   return data;
 }
-

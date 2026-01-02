@@ -69,7 +69,7 @@ export async function ensurePaymentAttempt(params: {
   organizationId?: string | null;
   stripeConnectedAccountId?: string | null;
   requestFingerprint?: string | null;
-  metadata?: Record<string, unknown> | null;
+  metadata?: PaymentAttemptInsert["metadata"];
 }) {
   const {
     supabase,
@@ -224,4 +224,3 @@ export async function waitForExistingStripeResource(
   if (!hasStripeResource(data)) return null;
   return data;
 }
-

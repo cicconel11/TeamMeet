@@ -305,6 +305,9 @@ export async function POST(req: Request) {
       ? (event.data.object as { id?: string | null }).id
       : null;
 
+  const extractAccountId = (value: string | Stripe.Account | null | undefined) =>
+    typeof value === "string" ? value : value?.id || null;
+
   const eventRegistration = await registerStripeEvent({
     supabase,
     eventId: event.id,
@@ -496,7 +499,10 @@ export async function POST(req: Request) {
           checkoutSessionId: (pi.metadata?.checkout_session_id as string | undefined) ?? null,
           status: "succeeded",
           organizationId: orgId,
-          stripeConnectedAccountId: pi.on_behalf_of || pi.transfer_data?.destination || null,
+          stripeConnectedAccountId:
+            extractAccountId(pi.on_behalf_of) ||
+            extractAccountId(pi.transfer_data?.destination) ||
+            null,
         });
 
         await upsertDonationRecord({
@@ -530,7 +536,10 @@ export async function POST(req: Request) {
           status: "failed",
           lastError: piFailed.last_payment_error?.message || piFailed.status || "failed",
           organizationId: orgIdFailed,
-          stripeConnectedAccountId: piFailed.on_behalf_of || piFailed.transfer_data?.destination || null,
+          stripeConnectedAccountId:
+            extractAccountId(piFailed.on_behalf_of) ||
+            extractAccountId(piFailed.transfer_data?.destination) ||
+            null,
         });
 
         await upsertDonationRecord({

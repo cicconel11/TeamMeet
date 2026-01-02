@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Options = {
   storageKey: string;
@@ -54,7 +54,7 @@ export function useIdempotencyKey({ storageKey, fingerprint }: Options) {
     }
   }, [fingerprint, idempotencyKey, storageKey]);
 
-  const refreshKey = () => {
+  const refreshKey = useCallback(() => {
     const next = newKey();
     setIdempotencyKey(next);
     lastFingerprint.current = fingerprint ?? null;
@@ -66,7 +66,7 @@ export function useIdempotencyKey({ storageKey, fingerprint }: Options) {
         // ignore
       }
     }
-  };
+  }, [fingerprint, storageKey]);
 
   useEffect(() => {
     if (fingerprint === lastFingerprint.current) return;
@@ -75,7 +75,7 @@ export function useIdempotencyKey({ storageKey, fingerprint }: Options) {
       refreshKey();
     }
     lastFingerprint.current = fingerprint ?? null;
-  }, [fingerprint, idempotencyKey]);
+  }, [fingerprint, idempotencyKey, refreshKey]);
 
   return { idempotencyKey, refreshKey };
 }
