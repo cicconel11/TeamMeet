@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { requireEnv } from "@/lib/env";
 import type { AlumniBucket, Database, SubscriptionInterval } from "@/types/database";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { markStripeEventProcessed, registerStripeEvent } from "@/lib/payments/stripe-events";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -124,6 +125,45 @@ export async function POST(req: Request) {
       p_count_delta: countDelta,
       p_last: occurredAt ?? new Date().toISOString(),
     });
+  };
+
+  const updatePaymentAttemptStatus = async (params: {
+    paymentAttemptId?: string | null;
+    paymentIntentId?: string | null;
+    checkoutSessionId?: string | null;
+    status?: string;
+    lastError?: string | null;
+    organizationId?: string | null;
+    stripeConnectedAccountId?: string | null;
+  }) => {
+    const payload: Database["public"]["Tables"]["payment_attempts"]["Update"] = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (typeof params.status === "string") payload.status = params.status;
+    if (params.lastError !== undefined) payload.last_error = params.lastError;
+    if (params.paymentIntentId !== undefined) payload.stripe_payment_intent_id = params.paymentIntentId;
+    if (params.checkoutSessionId !== undefined) payload.stripe_checkout_session_id = params.checkoutSessionId;
+    if (params.organizationId !== undefined) payload.organization_id = params.organizationId;
+    if (params.stripeConnectedAccountId !== undefined) {
+      payload.stripe_connected_account_id = params.stripeConnectedAccountId;
+    }
+
+    let query = supabase.from("payment_attempts").update(payload);
+    if (params.paymentAttemptId) {
+      query = query.eq("id", params.paymentAttemptId);
+    } else if (params.paymentIntentId) {
+      query = query.eq("stripe_payment_intent_id", params.paymentIntentId);
+    } else if (params.checkoutSessionId) {
+      query = query.eq("stripe_checkout_session_id", params.checkoutSessionId);
+    } else {
+      return;
+    }
+
+    const { error } = await query;
+    if (error) {
+      console.error("[stripe-webhook] Failed to update payment_attempt", error);
+    }
   };
 
   type OrgMetadata = {
@@ -260,199 +300,265 @@ export async function POST(req: Request) {
     return { organizationId, parsed };
   };
 
+  const objectId =
+    typeof event.data?.object === "object" && event.data?.object && "id" in event.data.object
+      ? (event.data.object as { id?: string | null }).id
+      : null;
+
+  const eventRegistration = await registerStripeEvent({
+    supabase,
+    eventId: event.id,
+    type: event.type,
+    payload: {
+      livemode: event.livemode,
+      object_id: objectId,
+    },
+  });
+
+  if (eventRegistration.alreadyProcessed) {
+    console.log("[stripe-webhook] Duplicate event ignored:", event.id);
+    return NextResponse.json({ received: true });
+  }
+
   type SubscriptionWithPeriod = Stripe.Subscription & { current_period_end?: number | null };
   type InvoiceWithSub = Stripe.Invoice & {
     subscription?: string | Stripe.Subscription | null;
     customer?: string | Stripe.Customer | Stripe.DeletedCustomer | string | null;
   };
 
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const subscriptionId =
-        typeof session.subscription === "string"
-          ? session.subscription
-          : session.subscription?.id || null;
-      const customerId =
-        typeof session.customer === "string" ? session.customer : session.customer?.id || null;
+  try {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const subscriptionId =
+          typeof session.subscription === "string"
+            ? session.subscription
+            : session.subscription?.id || null;
+        const customerId =
+          typeof session.customer === "string" ? session.customer : session.customer?.id || null;
 
-      console.log("[stripe-webhook] checkout.session.completed - org:", session.metadata?.organization_id, "session:", session.id);
+        console.log("[stripe-webhook] checkout.session.completed - org:", session.metadata?.organization_id, "session:", session.id);
 
-      if (session.mode === "subscription" || subscriptionId) {
-        if (session.payment_status !== "paid") {
-          console.warn("[stripe-webhook] Checkout completed without payment; skipping org provisioning");
-          break;
-        }
-
-        const { organizationId } = await resolveOrgForSubscriptionFlow(session.metadata);
-        if (!organizationId) {
-          console.warn("[stripe-webhook] Missing organization info for checkout.session.completed");
-          break;
-        }
-
-        let status = session.status || "completed";
-        let currentPeriodEnd: string | null = null;
-
-        if (subscriptionId) {
-          const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as SubscriptionWithPeriod;
-          if ("current_period_end" in subscription) {
-            status = subscription.status;
-            const periodEnd = Number(subscription.current_period_end);
-            currentPeriodEnd = periodEnd
-              ? new Date(periodEnd * 1000).toISOString()
-              : null;
+        if (session.mode === "subscription" || subscriptionId) {
+          if (session.payment_status !== "paid") {
+            console.warn("[stripe-webhook] Checkout completed without payment; skipping org provisioning");
+            break;
           }
+
+          const { organizationId } = await resolveOrgForSubscriptionFlow(session.metadata);
+          if (!organizationId) {
+            console.warn("[stripe-webhook] Missing organization info for checkout.session.completed");
+            break;
+          }
+
+          let status = session.status || "completed";
+          let currentPeriodEnd: string | null = null;
+
+          if (subscriptionId) {
+            const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as SubscriptionWithPeriod;
+            if ("current_period_end" in subscription) {
+              status = subscription.status;
+              const periodEnd = Number(subscription.current_period_end);
+              currentPeriodEnd = periodEnd
+                ? new Date(periodEnd * 1000).toISOString()
+                : null;
+            }
+          }
+
+          await updatePaymentAttemptStatus({
+            paymentAttemptId: (session.metadata?.payment_attempt_id as string | undefined) ?? null,
+            checkoutSessionId: session.id,
+            paymentIntentId:
+              typeof session.payment_intent === "string"
+                ? session.payment_intent
+                : session.payment_intent?.id || null,
+            status: status === "complete" ? "succeeded" : status,
+            organizationId,
+          });
+
+          console.log("[stripe-webhook] Updating subscription for org:", organizationId, { subscriptionId, customerId, status, currentPeriodEnd });
+          await updateByOrgId(organizationId, {
+            stripe_subscription_id: subscriptionId,
+            stripe_customer_id: customerId,
+            status,
+            current_period_end: currentPeriodEnd,
+          });
+          console.log("[stripe-webhook] Subscription updated successfully for org:", organizationId);
+        } else if (session.mode === "payment") {
+          const donationOrgId = session.metadata?.organization_id;
+          if (!donationOrgId) break;
+
+          const paymentIntentId =
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id || null;
+          const amountCents = session.amount_total ?? session.amount_subtotal ?? 0;
+
+          await updatePaymentAttemptStatus({
+            paymentAttemptId: (session.metadata?.payment_attempt_id as string | undefined) ?? null,
+            paymentIntentId,
+            checkoutSessionId: session.id,
+            status: session.payment_status || "processing",
+            organizationId: donationOrgId,
+            stripeConnectedAccountId: session.metadata?.destination || null,
+          });
+
+          await upsertDonationRecord({
+            organizationId: donationOrgId,
+            paymentIntentId,
+            checkoutSessionId: session.id,
+            amountCents: amountCents ?? 0,
+            currency: session.currency || "usd",
+            donorName: session.customer_details?.name || (session.metadata?.donor_name ?? null),
+            donorEmail: session.customer_details?.email || (session.metadata?.donor_email ?? null),
+            eventId: session.metadata?.event_id || null,
+            purpose: session.metadata?.purpose || null,
+            metadata: session.metadata || null,
+            status: session.payment_status || "processing",
+          });
         }
-
-        console.log("[stripe-webhook] Updating subscription for org:", organizationId, { subscriptionId, customerId, status, currentPeriodEnd });
-        await updateByOrgId(organizationId, {
-          stripe_subscription_id: subscriptionId,
-          stripe_customer_id: customerId,
-          status,
-          current_period_end: currentPeriodEnd,
-        });
-        console.log("[stripe-webhook] Subscription updated successfully for org:", organizationId);
-      } else if (session.mode === "payment") {
-        const donationOrgId = session.metadata?.organization_id;
-        if (!donationOrgId) break;
-
-        const paymentIntentId =
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : session.payment_intent?.id || null;
-        const amountCents = session.amount_total ?? session.amount_subtotal ?? 0;
-
-        await upsertDonationRecord({
-          organizationId: donationOrgId,
-          paymentIntentId,
-          checkoutSessionId: session.id,
-          amountCents: amountCents ?? 0,
-          currency: session.currency || "usd",
-          donorName: session.customer_details?.name || (session.metadata?.donor_name ?? null),
-          donorEmail: session.customer_details?.email || (session.metadata?.donor_email ?? null),
-          eventId: session.metadata?.event_id || null,
-          purpose: session.metadata?.purpose || null,
-          metadata: session.metadata || null,
-          status: session.payment_status || "processing",
-        });
+        break;
       }
-      break;
-    }
-    case "customer.subscription.created":
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted": {
-      const subscription = event.data.object as SubscriptionWithPeriod;
-      const customerId =
-        typeof subscription.customer === "string"
-          ? subscription.customer
-          : subscription.customer?.id || null;
-      const periodEnd = subscription.current_period_end ? Number(subscription.current_period_end) : 0;
-      const currentPeriodEnd = periodEnd
-        ? new Date(periodEnd * 1000).toISOString()
-        : null;
-      const status = subscription.status || "canceled";
-
-      const shouldProvision = status !== "incomplete" && status !== "incomplete_expired";
-      const { organizationId } = shouldProvision
-        ? await resolveOrgForSubscriptionFlow(subscription.metadata)
-        : { organizationId: null };
-      if (organizationId) {
-        await updateByOrgId(organizationId, {
-          stripe_subscription_id: subscription.id,
-          stripe_customer_id: customerId,
-          status,
-          current_period_end: currentPeriodEnd,
-        });
-      } else {
-        await updateBySubscriptionId(subscription.id, {
-          status,
-          current_period_end: currentPeriodEnd,
-          stripe_customer_id: customerId,
-        });
-      }
-      break;
-    }
-    case "invoice.paid": {
-      const invoice = event.data.object as InvoiceWithSub;
-      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
-      const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
-      if (subscriptionId) {
-        const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as SubscriptionWithPeriod;
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as SubscriptionWithPeriod;
+        const customerId =
+          typeof subscription.customer === "string"
+            ? subscription.customer
+            : subscription.customer?.id || null;
         const periodEnd = subscription.current_period_end ? Number(subscription.current_period_end) : 0;
         const currentPeriodEnd = periodEnd
           ? new Date(periodEnd * 1000).toISOString()
           : null;
-        await updateBySubscriptionId(subscriptionId, {
-          status: subscription.status,
-          current_period_end: currentPeriodEnd,
-          stripe_customer_id: customerId,
+        const status = subscription.status || "canceled";
+
+        const shouldProvision = status !== "incomplete" && status !== "incomplete_expired";
+        const { organizationId } = shouldProvision
+          ? await resolveOrgForSubscriptionFlow(subscription.metadata)
+          : { organizationId: null };
+        if (organizationId) {
+          await updateByOrgId(organizationId, {
+            stripe_subscription_id: subscription.id,
+            stripe_customer_id: customerId,
+            status,
+            current_period_end: currentPeriodEnd,
+          });
+        } else {
+          await updateBySubscriptionId(subscription.id, {
+            status,
+            current_period_end: currentPeriodEnd,
+            stripe_customer_id: customerId,
+          });
+        }
+        break;
+      }
+      case "invoice.paid": {
+        const invoice = event.data.object as InvoiceWithSub;
+        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+        const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+        if (subscriptionId) {
+          const subscription = (await stripe.subscriptions.retrieve(subscriptionId)) as SubscriptionWithPeriod;
+          const periodEnd = subscription.current_period_end ? Number(subscription.current_period_end) : 0;
+          const currentPeriodEnd = periodEnd
+            ? new Date(periodEnd * 1000).toISOString()
+            : null;
+          await updateBySubscriptionId(subscriptionId, {
+            status: subscription.status,
+            current_period_end: currentPeriodEnd,
+            stripe_customer_id: customerId,
+          });
+        }
+        break;
+      }
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as InvoiceWithSub;
+        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+        if (subscriptionId) {
+          await updateBySubscriptionId(subscriptionId, { status: "past_due" });
+        }
+        break;
+      }
+
+      // Donation payment intent handlers
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      case "payment_intent.succeeded": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const orgId = pi.metadata?.organization_id;
+        if (!orgId) break;
+
+        const amountSucceeded = pi.amount_received ?? pi.amount ?? 0;
+        const occurredAt = pi.created ? new Date(pi.created * 1000).toISOString() : new Date().toISOString();
+
+        await updatePaymentAttemptStatus({
+          paymentAttemptId: (pi.metadata?.payment_attempt_id as string | undefined) ?? null,
+          paymentIntentId: pi.id,
+          checkoutSessionId: (pi.metadata?.checkout_session_id as string | undefined) ?? null,
+          status: "succeeded",
+          organizationId: orgId,
+          stripeConnectedAccountId: pi.on_behalf_of || pi.transfer_data?.destination || null,
         });
+
+        await upsertDonationRecord({
+          organizationId: orgId,
+          paymentIntentId: pi.id,
+          checkoutSessionId: (pi.metadata?.checkout_session_id as string | undefined) ?? null,
+          amountCents: amountSucceeded,
+          currency: pi.currency || "usd",
+          donorName: pi.metadata?.donor_name || null,
+          donorEmail: pi.receipt_email || pi.metadata?.donor_email || null,
+          eventId: pi.metadata?.event_id || null,
+          purpose: pi.metadata?.purpose || null,
+          metadata: pi.metadata || null,
+          status: "succeeded",
+        });
+
+        await incrementDonationStats(orgId, amountSucceeded, occurredAt, 1);
+        break;
       }
-      break;
-    }
-    case "invoice.payment_failed": {
-      const invoice = event.data.object as InvoiceWithSub;
-      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
-      if (subscriptionId) {
-        await updateBySubscriptionId(subscriptionId, { status: "past_due" });
+
+      case "payment_intent.payment_failed": {
+        const piFailed = event.data.object as Stripe.PaymentIntent;
+        const orgIdFailed = piFailed.metadata?.organization_id;
+        if (!orgIdFailed) break;
+
+        const amountFailed = piFailed.amount ?? 0;
+        await updatePaymentAttemptStatus({
+          paymentAttemptId: (piFailed.metadata?.payment_attempt_id as string | undefined) ?? null,
+          paymentIntentId: piFailed.id,
+          checkoutSessionId: (piFailed.metadata?.checkout_session_id as string | undefined) ?? null,
+          status: "failed",
+          lastError: piFailed.last_payment_error?.message || piFailed.status || "failed",
+          organizationId: orgIdFailed,
+          stripeConnectedAccountId: piFailed.on_behalf_of || piFailed.transfer_data?.destination || null,
+        });
+
+        await upsertDonationRecord({
+          organizationId: orgIdFailed,
+          paymentIntentId: piFailed.id,
+          checkoutSessionId: (piFailed.metadata?.checkout_session_id as string | undefined) ?? null,
+          amountCents: amountFailed,
+          currency: piFailed.currency || "usd",
+          donorName: piFailed.metadata?.donor_name || null,
+          donorEmail: piFailed.receipt_email || piFailed.metadata?.donor_email || null,
+          eventId: piFailed.metadata?.event_id || null,
+          purpose: piFailed.metadata?.purpose || null,
+          metadata: piFailed.metadata || null,
+          status: "failed",
+        });
+        break;
       }
-      break;
+
+      default:
+        // Ignore other events for now
+        break;
     }
 
-    // Donation payment intent handlers
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    case "payment_intent.succeeded": {
-      const pi = event.data.object as Stripe.PaymentIntent;
-      const orgId = pi.metadata?.organization_id;
-      if (!orgId) break;
-
-      const amountSucceeded = pi.amount_received ?? pi.amount ?? 0;
-      const occurredAt = pi.created ? new Date(pi.created * 1000).toISOString() : new Date().toISOString();
-
-      await upsertDonationRecord({
-        organizationId: orgId,
-        paymentIntentId: pi.id,
-        checkoutSessionId: (pi.metadata?.checkout_session_id as string | undefined) ?? null,
-        amountCents: amountSucceeded,
-        currency: pi.currency || "usd",
-        donorName: pi.metadata?.donor_name || null,
-        donorEmail: pi.receipt_email || pi.metadata?.donor_email || null,
-        eventId: pi.metadata?.event_id || null,
-        purpose: pi.metadata?.purpose || null,
-        metadata: pi.metadata || null,
-        status: "succeeded",
-      });
-
-      await incrementDonationStats(orgId, amountSucceeded, occurredAt, 1);
-      break;
-    }
-
-    case "payment_intent.payment_failed": {
-      const piFailed = event.data.object as Stripe.PaymentIntent;
-      const orgIdFailed = piFailed.metadata?.organization_id;
-      if (!orgIdFailed) break;
-
-      const amountFailed = piFailed.amount ?? 0;
-      await upsertDonationRecord({
-        organizationId: orgIdFailed,
-        paymentIntentId: piFailed.id,
-        checkoutSessionId: (piFailed.metadata?.checkout_session_id as string | undefined) ?? null,
-        amountCents: amountFailed,
-        currency: piFailed.currency || "usd",
-        donorName: piFailed.metadata?.donor_name || null,
-        donorEmail: piFailed.receipt_email || piFailed.metadata?.donor_email || null,
-        eventId: piFailed.metadata?.event_id || null,
-        purpose: piFailed.metadata?.purpose || null,
-        metadata: piFailed.metadata || null,
-        status: "failed",
-      });
-      break;
-    }
-
-    default:
-      // Ignore other events for now
-      break;
+    await markStripeEventProcessed(supabase, event.id);
+    return NextResponse.json({ received: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Webhook processing failed";
+    console.error("[stripe-webhook] Handler error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json({ received: true });
 }

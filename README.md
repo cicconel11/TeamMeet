@@ -20,6 +20,14 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Payments Idempotency
+
+- All payment flows (subscriptions, donations, Connect onboarding) store an attempt row in `payment_attempts` keyed by `idempotency_key` (unique). Stripe objects reuse that row and every Stripe create call includes the same `idempotencyKey`.
+- Webhooks are deduped via `stripe_events(event_id unique)`. Each event is recorded once; retries skip if `processed_at` is set.
+- Clients keep a stable key in local storage per flow; server returns existing `checkout_url`/`session`/`payment_intent` if the same key is replayed.
+- Troubleshooting: look up the attempt by `idempotency_key` to see status and any `last_error`; confirm the matching Stripe IDs; check `stripe_events` to see if the webhook ran.
+- Tests: `npm run test:payments` runs idempotency + webhook dedupe unit tests (uses the lightweight TS loader in `tests/ts-loader.js`).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

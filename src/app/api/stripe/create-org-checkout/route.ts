@@ -2,6 +2,16 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { stripe, getPriceIds, isSalesLedBucket } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import {
+  claimPaymentAttempt,
+  ensurePaymentAttempt,
+  hashFingerprint,
+  hasStripeResource,
+  IdempotencyConflictError,
+  updatePaymentAttempt,
+  waitForExistingStripeResource,
+} from "@/lib/payments/idempotency";
 import type { AlumniBucket, SubscriptionInterval } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -14,31 +24,15 @@ interface RequestBody {
   primaryColor?: string;
   billingInterval: SubscriptionInterval;
   alumniBucket: AlumniBucket;
+  idempotencyKey?: string;
+  paymentAttemptId?: string;
 }
 
 export async function POST(req: Request) {
   console.log("[create-org-checkout] Starting...");
   const supabase = await createClient();
+  const serviceSupabase = createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
-
-  // Temporary diagnostics to verify runtime env values (redacted)
-  try {
-    const priceEnv = getPriceIds("month", "none");
-    console.log("[create-org-checkout][diag]", {
-      secretKeyPrefix: process.env.STRIPE_SECRET_KEY?.slice(0, 10),
-      baseMonthly: process.env.STRIPE_PRICE_BASE_MONTHLY,
-      baseYearly: process.env.STRIPE_PRICE_BASE_YEARLY,
-      alumni_0_200_month: process.env.STRIPE_PRICE_ALUMNI_0_200_MONTHLY,
-      alumni_0_200_year: process.env.STRIPE_PRICE_ALUMNI_0_200_YEARLY,
-      alumni_201_600_month: process.env.STRIPE_PRICE_ALUMNI_201_600_MONTHLY,
-      alumni_201_600_year: process.env.STRIPE_PRICE_ALUMNI_201_600_YEARLY,
-      alumni_601_1500_month: process.env.STRIPE_PRICE_ALUMNI_601_1500_MONTHLY,
-      alumni_601_1500_year: process.env.STRIPE_PRICE_ALUMNI_601_1500_YEARLY,
-      samplePriceFromHelper: priceEnv.basePrice,
-    });
-  } catch (e) {
-    console.log("[create-org-checkout][diag] price helper failed", e);
-  }
 
   if (!user) {
     console.log("[create-org-checkout] Unauthorized - no user");
@@ -54,6 +48,8 @@ export async function POST(req: Request) {
   }
 
   const { name, slug, description, primaryColor, billingInterval, alumniBucket } = body;
+  const idempotencyKey = body.idempotencyKey?.trim() || null;
+  const paymentAttemptId = body.paymentAttemptId?.trim() || null;
 
   const interval: SubscriptionInterval = billingInterval === "year" ? "year" : "month";
   const bucket: AlumniBucket = ["none", "0-200", "201-600", "601-1500", "1500+"].includes(alumniBucket)
@@ -157,7 +153,37 @@ export async function POST(req: Request) {
   try {
     const { basePrice, alumniPrice } = getPriceIds(interval, bucket);
     const origin = req.headers.get("origin") ?? new URL(req.url).origin;
-    const pendingOrgId = randomUUID();
+    const pendingOrgIdSeed = randomUUID();
+    const fingerprint = hashFingerprint({
+      userId: user.id,
+      name,
+      slug,
+      interval,
+      bucket,
+      primaryColor,
+    });
+
+    const attemptMetadata = {
+      pending_org_id: pendingOrgIdSeed,
+      slug,
+      alumni_bucket: bucket,
+      billing_interval: interval,
+    };
+
+    const { attempt } = await ensurePaymentAttempt({
+      supabase: serviceSupabase,
+      idempotencyKey,
+      paymentAttemptId,
+      flowType: "subscription_checkout",
+      amountCents: 0,
+      currency: "usd",
+      userId: user.id,
+      requestFingerprint: fingerprint,
+      metadata: attemptMetadata,
+    });
+
+    const storedMetadata = (attempt.metadata as Record<string, string> | null) ?? {};
+    const pendingOrgId = storedMetadata.pending_org_id || pendingOrgIdSeed;
     const metadata = {
       organization_id: pendingOrgId,
       organization_slug: slug,
@@ -167,27 +193,83 @@ export async function POST(req: Request) {
       alumni_bucket: bucket,
       created_by: user.id,
       base_interval: interval,
+      payment_attempt_id: attempt.id,
     };
+
+    const { attempt: claimedAttempt, claimed } = await claimPaymentAttempt({
+      supabase: serviceSupabase,
+      attempt,
+      amountCents: 0,
+      currency: "usd",
+      requestFingerprint: fingerprint,
+      stripeConnectedAccountId: null,
+    });
+
+    const respondWithExisting = (candidate: typeof claimedAttempt) => {
+      if (candidate.stripe_checkout_session_id && candidate.checkout_url) {
+        return NextResponse.json({
+          url: candidate.checkout_url,
+          idempotencyKey: candidate.idempotency_key,
+          paymentAttemptId: candidate.id,
+        });
+      }
+      return null;
+    };
+
+    if (!claimed) {
+      const existingResponse = hasStripeResource(claimedAttempt)
+        ? respondWithExisting(claimedAttempt)
+        : null;
+      if (existingResponse) return existingResponse;
+
+      const awaited = await waitForExistingStripeResource(serviceSupabase, claimedAttempt.id);
+      if (awaited && hasStripeResource(awaited)) {
+        const awaitedResponse = respondWithExisting(awaited);
+        if (awaitedResponse) return awaitedResponse;
+      }
+
+      return NextResponse.json(
+        {
+          error: "Checkout is already processing for this idempotency key. Retry shortly with the same key.",
+          idempotencyKey: claimedAttempt.idempotency_key,
+          paymentAttemptId: claimedAttempt.id,
+        },
+        { status: 409 },
+      );
+    }
 
     console.log("[create-org-checkout] Creating Stripe session with prices:", { basePrice, alumniPrice, origin, pendingOrgId });
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer_email: user.email || undefined,
-      line_items: [
-        { price: basePrice, quantity: 1 },
-        ...(alumniPrice ? [{ price: alumniPrice, quantity: 1 }] : []),
-      ],
-      subscription_data: {
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "subscription",
+        customer_email: user.email || undefined,
+        line_items: [
+          { price: basePrice, quantity: 1 },
+          ...(alumniPrice ? [{ price: alumniPrice, quantity: 1 }] : []),
+        ],
+        subscription_data: {
+          metadata,
+        },
         metadata,
+        success_url: `${origin}/app?org=${slug}&checkout=success`,
+        cancel_url: `${origin}/app?org=${slug}&checkout=cancel`,
       },
-      metadata,
-      success_url: `${origin}/app?org=${slug}&checkout=success`,
-      cancel_url: `${origin}/app?org=${slug}&checkout=cancel`,
+      { idempotencyKey: claimedAttempt.idempotency_key },
+    );
+
+    await updatePaymentAttempt(serviceSupabase, claimedAttempt.id, {
+      stripe_checkout_session_id: session.id,
+      checkout_url: session.url,
+      status: "processing",
     });
 
     console.log("[create-org-checkout] Success! Checkout URL:", session.url);
-    return NextResponse.json({ url: session.url });
+    return NextResponse.json({
+      url: session.url,
+      idempotencyKey: claimedAttempt.idempotency_key,
+      paymentAttemptId: claimedAttempt.id,
+    });
   } catch (error) {
     const stripeErr = error as {
       type?: string;
@@ -197,6 +279,11 @@ export async function POST(req: Request) {
       statusCode?: number;
       raw?: { message?: string };
     };
+
+    if (error instanceof IdempotencyConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     console.error("[create-org-checkout] Error details:", {
       type: stripeErr?.type,
       code: stripeErr?.code,
@@ -204,6 +291,13 @@ export async function POST(req: Request) {
       statusCode: stripeErr?.statusCode,
       message: stripeErr?.message || stripeErr?.raw?.message || (error instanceof Error ? error.message : String(error)),
     });
+
+    const lastError = stripeErr?.message || stripeErr?.raw?.message || "checkout_failed";
+    if (paymentAttemptId) {
+      await serviceSupabase.from("payment_attempts").update({ last_error: lastError }).eq("id", paymentAttemptId);
+    } else if (idempotencyKey) {
+      await serviceSupabase.from("payment_attempts").update({ last_error: lastError }).eq("idempotency_key", idempotencyKey);
+    }
 
     const message = error instanceof Error ? error.message : "Unable to start checkout";
     return NextResponse.json({ error: message }, { status: 400 });

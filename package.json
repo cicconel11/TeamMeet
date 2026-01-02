@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:auth": "node --test tests/middleware.testing123.test.ts"
+    "test:auth": "node --test tests/middleware.testing123.test.ts",
+    "test:payments": "node --test --loader ./tests/ts-loader.js tests/payment-idempotency.test.ts tests/stripe-webhook-dedupe.test.ts"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.15.0",

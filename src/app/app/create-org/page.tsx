@@ -1,9 +1,10 @@
  "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Input, Card, Textarea } from "@/components/ui";
+import { useIdempotencyKey } from "@/hooks";
 import type { AlumniBucket, SubscriptionInterval } from "@/types/database";
 
 export default function CreateOrgPage() {
@@ -17,6 +18,22 @@ export default function CreateOrgPage() {
   const [billingInterval, setBillingInterval] = useState<SubscriptionInterval>("month");
   const [alumniBucket, setAlumniBucket] = useState<AlumniBucket>("none");
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const fingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        name: name.trim() || "",
+        slug: slug.trim() || "",
+        description: description.trim() || "",
+        primaryColor: primaryColor || "",
+        billingInterval,
+        alumniBucket,
+      }),
+    [alumniBucket, billingInterval, description, name, primaryColor, slug],
+  );
+  const { idempotencyKey } = useIdempotencyKey({
+    storageKey: "create-org-checkout",
+    fingerprint,
+  });
 
   // Auto-generate slug from name
   const handleNameChange = (value: string) => {
@@ -36,6 +53,11 @@ export default function CreateOrgPage() {
     setIsLoading(true);
     setError(null);
     setInfoMessage(null);
+    if (!idempotencyKey) {
+      setError("Preparing checkout... please try again.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       console.log("Creating org checkout with:", { name, slug, billingInterval, alumniBucket });
@@ -50,6 +72,7 @@ export default function CreateOrgPage() {
           primaryColor,
           billingInterval,
           alumniBucket,
+          idempotencyKey,
         }),
       });
 
@@ -260,4 +283,3 @@ export default function CreateOrgPage() {
     </div>
   );
 }
-

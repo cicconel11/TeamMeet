@@ -14,9 +14,11 @@ export async function POST(req: Request) {
   }
 
   let organizationId: string | undefined;
+  let idempotencyKey: string | null = null;
   try {
     const body = await req.json();
     organizationId = body.organizationId;
+    idempotencyKey = body.idempotencyKey?.trim() || null;
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
@@ -51,6 +53,7 @@ export async function POST(req: Request) {
 
   try {
     if (!accountId) {
+      const accountKey = idempotencyKey || `connect-account-${org.id}-${user.id}`;
       const account = await stripe.accounts.create({
         type: "express",
         metadata: {
@@ -58,7 +61,7 @@ export async function POST(req: Request) {
           organization_slug: org.slug,
           created_by: user.id,
         },
-      });
+      }, { idempotencyKey: accountKey });
       accountId = account.id;
 
       await supabase
@@ -76,9 +79,9 @@ export async function POST(req: Request) {
       refresh_url: refreshUrl,
       return_url: returnUrl,
       type: "account_onboarding",
-    });
+    }, idempotencyKey ? { idempotencyKey } : undefined);
 
-    return NextResponse.json({ url: accountLink.url, accountId });
+    return NextResponse.json({ url: accountLink.url, accountId, idempotencyKey: idempotencyKey || null });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to start Stripe onboarding";
     console.error("[connect-onboarding] Error:", message);

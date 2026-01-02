@@ -949,6 +949,87 @@ export type Database = {
           },
         ]
       }
+      payment_attempts: {
+        Row: {
+          amount_cents: number
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          flow_type: string
+          id: string
+          idempotency_key: string
+          last_error: string | null
+          metadata: Json | null
+          organization_id: string | null
+          request_fingerprint: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_connected_account_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_payout_id: string | null
+          stripe_transfer_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          amount_cents?: number
+          checkout_url?: string | null
+          created_at?: string
+          currency?: string
+          flow_type: string
+          id?: string
+          idempotency_key: string
+          last_error?: string | null
+          metadata?: Json | null
+          organization_id?: string | null
+          request_fingerprint?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_connected_account_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_payout_id?: string | null
+          stripe_transfer_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          checkout_url?: string | null
+          created_at?: string
+          currency?: string
+          flow_type?: string
+          id?: string
+          idempotency_key?: string
+          last_error?: string | null
+          metadata?: Json | null
+          organization_id?: string | null
+          request_fingerprint?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_connected_account_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_payout_id?: string | null
+          stripe_transfer_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_attempts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_invites: {
         Row: {
           code: string
@@ -1178,6 +1259,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      stripe_events: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          payload_json: Json | null
+          processed_at: string | null
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          payload_json?: Json | null
+          processed_at?: string | null
+          type: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          payload_json?: Json | null
+          processed_at?: string | null
+          type?: string
+        }
+        Relationships: []
       }
       user_organization_roles: {
         Row: {
@@ -1551,8 +1659,10 @@ export type OrganizationDonation = Tables<'organization_donations'>;
 export type OrganizationDonationStat = Tables<'organization_donation_stats'>;
 export type OrganizationInvite = Tables<'organization_invites'>;
 export type OrganizationSubscription = Tables<'organization_subscriptions'>;
+export type PaymentAttempt = Tables<'payment_attempts'>;
 export type PhilanthropyEvent = Tables<'philanthropy_events'>;
 export type Record = Tables<'records'>;
+export type StripeEvent = Tables<'stripe_events'>;
 export type User = Tables<'users'>;
 export type UserOrganizationRole = Tables<'user_organization_roles'>;
 export type Workout = Tables<'workouts'>;

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardTitle, CardDescription, Button } from "@/components/ui";
+import { useIdempotencyKey } from "@/hooks";
 
 interface ConnectSetupProps {
   organizationId: string;
@@ -11,16 +12,26 @@ interface ConnectSetupProps {
 export function ConnectSetup({ organizationId, isConnected }: ConnectSetupProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fingerprint = useMemo(() => organizationId, [organizationId]);
+  const { idempotencyKey } = useIdempotencyKey({
+    storageKey: `connect-onboarding:${organizationId}`,
+    fingerprint,
+  });
 
   const handleSetup = async () => {
     setError(null);
     setIsLoading(true);
+    if (!idempotencyKey) {
+      setError("Preparing Stripe onboarding... please retry.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/stripe/connect-onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId }),
+        body: JSON.stringify({ organizationId, idempotencyKey }),
       });
 
       const data = await res.json();
@@ -98,4 +109,3 @@ export function ConnectSetup({ organizationId, isConnected }: ConnectSetupProps)
     </Card>
   );
 }
-

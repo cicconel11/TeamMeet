@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, Button, Input, Textarea, Select } from "@/components/ui";
+import { useIdempotencyKey } from "@/hooks";
 
 interface PhilanthropyEventOption {
   id: string;
@@ -30,6 +31,23 @@ export function DonationForm({
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        organizationId,
+        amount: Number(amount) || 0,
+        designation,
+        eventId,
+        purpose: note.trim() || undefined,
+        donorEmail: donorEmail.trim() || undefined,
+        donorName: donorName.trim() || undefined,
+      }),
+    [amount, designation, donorEmail, donorName, eventId, note, organizationId],
+  );
+  const { idempotencyKey } = useIdempotencyKey({
+    storageKey: `donation:${organizationId}`,
+    fingerprint,
+  });
 
   const hasEvents = (philanthropyEventsForForm ?? []).length > 0;
 
@@ -38,6 +56,11 @@ export function DonationForm({
     setIsLoading(true);
     setError(null);
     setMessage(null);
+    if (!idempotencyKey) {
+      setError("Preparing checkout... please try again.");
+      setIsLoading(false);
+      return;
+    }
 
     const amountNumber = Number(amount);
     if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
@@ -67,6 +90,7 @@ export function DonationForm({
             ? "Directed donation"
             : "General support"),
       mode: "checkout",
+      idempotencyKey,
     };
 
     try {
@@ -190,8 +214,6 @@ export function DonationForm({
     </Card>
   );
 }
-
-
 
 
 
