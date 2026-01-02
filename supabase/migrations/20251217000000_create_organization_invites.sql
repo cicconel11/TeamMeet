@@ -64,3 +64,4 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.organization_invites TO authentic
 
 
 
+

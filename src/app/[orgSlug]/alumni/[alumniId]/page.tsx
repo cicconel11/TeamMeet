@@ -44,6 +44,11 @@ export default async function AlumniDetailPage({ params }: AlumniDetailPageProps
   const alum = alumData as Alumni;
 
   const isAdmin = await isOrgAdmin(orgId);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const currentUserId = session?.user?.id ?? null;
+  const canEdit = isAdmin || (currentUserId && alum.user_id === currentUserId);
 
   return (
     <div className="animate-fade-in">
@@ -51,7 +56,7 @@ export default async function AlumniDetailPage({ params }: AlumniDetailPageProps
         title={`${alum.first_name} ${alum.last_name}`}
         backHref={`/${orgSlug}/alumni`}
         actions={
-          isAdmin && (
+          canEdit && (
             <div className="flex items-center gap-2">
               <Link href={`/${orgSlug}/alumni/${alumniId}/edit`}>
                 <Button variant="secondary">
@@ -61,13 +66,15 @@ export default async function AlumniDetailPage({ params }: AlumniDetailPageProps
                   Edit
                 </Button>
               </Link>
-              <SoftDeleteButton
-                table="alumni"
-                id={alumniId}
-                organizationField="organization_id"
-                organizationId={orgId}
-                redirectTo={`/${orgSlug}/alumni`}
-              />
+              {isAdmin && (
+                <SoftDeleteButton
+                  table="alumni"
+                  id={alumniId}
+                  organizationField="organization_id"
+                  organizationId={orgId}
+                  redirectTo={`/${orgSlug}/alumni`}
+                />
+              )}
             </div>
           )
         }
@@ -195,4 +202,3 @@ export default async function AlumniDetailPage({ params }: AlumniDetailPageProps
     </div>
   );
 }
-

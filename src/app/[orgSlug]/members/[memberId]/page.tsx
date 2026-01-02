@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Badge, Avatar, Button, SoftDeleteButton } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { isOrgAdmin } from "@/lib/auth";
+import type { Member } from "@/types/database";
 
 interface MemberDetailPageProps {
   params: Promise<{ orgSlug: string; memberId: string }>;
@@ -25,7 +26,7 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
   if (!org || orgError) return notFound();
 
   // Fetch member
-  const { data: member } = await supabase
+  const { data: memberData } = await supabase
     .from("members")
     .select("*")
     .eq("id", memberId)
@@ -33,9 +34,16 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
     .is("deleted_at", null)
     .single();
 
-  if (!member) return notFound();
+  if (!memberData) return notFound();
+
+  const member = memberData as Member;
 
   const isAdmin = await isOrgAdmin(org.id);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const currentUserId = session?.user?.id ?? null;
+  const canEdit = isAdmin || (currentUserId && member.user_id === currentUserId);
 
   return (
     <div className="animate-fade-in">
@@ -43,7 +51,7 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
         title={`${member.first_name} ${member.last_name}`}
         backHref={`/${orgSlug}/members`}
         actions={
-          isAdmin && (
+          canEdit && (
             <div className="flex items-center gap-2">
               <Link href={`/${orgSlug}/members/${memberId}/edit`}>
                 <Button variant="secondary">
@@ -53,13 +61,15 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
                   Edit
                 </Button>
               </Link>
-              <SoftDeleteButton
-                table="members"
-                id={memberId}
-                organizationField="organization_id"
-                organizationId={org.id}
-                redirectTo={`/${orgSlug}/members`}
-              />
+              {isAdmin && (
+                <SoftDeleteButton
+                  table="members"
+                  id={memberId}
+                  organizationField="organization_id"
+                  organizationId={org.id}
+                  redirectTo={`/${orgSlug}/members`}
+                />
+              )}
             </div>
           )
         }
@@ -170,4 +180,3 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
     </div>
   );
 }
-
