@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Badge } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
+import { getOrgRole } from "@/lib/auth/roles";
+import { filterAnnouncementsForUser } from "@/lib/announcements";
 
 interface DashboardPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -22,6 +24,8 @@ export default async function OrgDashboardPage({ params }: DashboardPageProps) {
 
   if (!org || orgError) return null;
 
+  const membership = await getOrgRole({ orgId: org.id });
+
   // Fetch counts and recent data in parallel
   const [
     { count: membersCount },
@@ -40,6 +44,12 @@ export default async function OrgDashboardPage({ params }: DashboardPageProps) {
     supabase.from("organization_donations").select("*").eq("organization_id", org.id).order("created_at", { ascending: false }).limit(5),
     supabase.from("organization_donation_stats").select("*").eq("organization_id", org.id).maybeSingle(),
   ]);
+
+  const visibleAnnouncements = filterAnnouncementsForUser(recentAnnouncements, {
+    role: membership.role,
+    status: membership.status,
+    userId: membership.userId,
+  });
 
   const totalDonations = ((donationStat as { total_amount_cents?: number } | null)?.total_amount_cents ?? 0) / 100;
 
@@ -95,8 +105,8 @@ export default async function OrgDashboardPage({ params }: DashboardPageProps) {
             </div>
           </div>
           <div className="divide-y divide-border">
-            {recentAnnouncements && recentAnnouncements.length > 0 ? (
-              recentAnnouncements.map((announcement) => (
+            {visibleAnnouncements && visibleAnnouncements.length > 0 ? (
+              visibleAnnouncements.map((announcement) => (
                 <div key={announcement.id} className="p-4">
                   <div className="flex items-start gap-3">
                     {announcement.is_pinned && (

@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Badge, Button, EmptyState, SoftDeleteButton } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { isOrgAdmin } from "@/lib/auth";
+import { getOrgRole } from "@/lib/auth/roles";
+import { filterAnnouncementsForUser } from "@/lib/announcements";
 
 interface AnnouncementsPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -24,6 +26,7 @@ export default async function AnnouncementsPage({ params }: AnnouncementsPagePro
   if (!org || orgError) return null;
 
   const isAdmin = await isOrgAdmin(org.id);
+  const membership = await getOrgRole({ orgId: org.id });
 
   // Fetch announcements, pinned first, then by date
   const { data: announcements } = await supabase
@@ -34,11 +37,17 @@ export default async function AnnouncementsPage({ params }: AnnouncementsPagePro
     .order("is_pinned", { ascending: false })
     .order("published_at", { ascending: false });
 
+  const visibleAnnouncements = filterAnnouncementsForUser(announcements, {
+    role: membership.role,
+    status: membership.status,
+    userId: membership.userId,
+  });
+
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="Announcements"
-        description={`${announcements?.length || 0} announcements`}
+        description={`${visibleAnnouncements.length} announcements`}
         actions={
           isAdmin && (
             <Link href={`/${orgSlug}/announcements/new`}>
@@ -54,9 +63,9 @@ export default async function AnnouncementsPage({ params }: AnnouncementsPagePro
       />
 
       {/* Announcements List */}
-      {announcements && announcements.length > 0 ? (
+      {visibleAnnouncements && visibleAnnouncements.length > 0 ? (
         <div className="space-y-4 stagger-children">
-          {announcements.map((announcement) => (
+          {visibleAnnouncements.map((announcement) => (
             <Card key={announcement.id} className="p-6">
               <div className="flex items-start gap-4">
                 {/* Pin indicator */}
@@ -141,4 +150,3 @@ export default async function AnnouncementsPage({ params }: AnnouncementsPagePro
     </div>
   );
 }
-
