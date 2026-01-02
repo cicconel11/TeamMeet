@@ -116,7 +116,9 @@ export default async function OrgDashboardPage({ params }: DashboardPageProps) {
                       <h3 className="font-medium text-foreground truncate">{announcement.title}</h3>
                       <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{announcement.body}</p>
                       <p className="text-xs text-muted-foreground mt-2">
-                        {new Date(announcement.published_at).toLocaleDateString()}
+                        {announcement.published_at
+                          ? new Date(announcement.published_at).toLocaleDateString()
+                          : "Scheduled"}
                       </p>
                     </div>
                   </div>
