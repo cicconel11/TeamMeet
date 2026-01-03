@@ -1,10 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Card, Button, Input, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
+
+interface SubscriptionInfo {
+  bucket: string;
+  alumniLimit: number | null;
+  alumniCount: number;
+  remaining: number | null;
+}
 
 export default function NewAlumniPage() {
   const router = useRouter();
@@ -13,6 +21,9 @@ export default function NewAlumniPage() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [quota, setQuota] = useState<SubscriptionInfo | null>(null);
+  const [isLoadingQuota, setIsLoadingQuota] = useState(true);
   
   const [formData, setFormData] = useState({
     first_name: "",
@@ -31,8 +42,57 @@ export default function NewAlumniPage() {
     position_title: "",
   });
 
+  const fetchQuota = useCallback(async (organizationId: string) => {
+    setIsLoadingQuota(true);
+    try {
+      const res = await fetch(`/api/organizations/${organizationId}/subscription`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setQuota(data as SubscriptionInfo);
+      } else {
+        setError(data.error || "Unable to load subscription details");
+      }
+    } catch {
+      setError("Unable to load subscription details");
+    } finally {
+      setIsLoadingQuota(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const loadOrg = async () => {
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("slug", orgSlug)
+        .single();
+
+      if (org?.id) {
+        setOrgId(org.id);
+        await fetchQuota(org.id);
+      } else {
+        setError("Organization not found");
+      }
+    };
+
+    void loadOrg();
+  }, [orgSlug, fetchQuota]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (
+      quota &&
+      quota.alumniLimit !== null &&
+      quota.remaining !== null &&
+      quota.remaining <= 0
+    ) {
+      setError("Alumni quota reached. Upgrade your plan from Settings → Invites to add more alumni.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -51,22 +111,26 @@ export default function NewAlumniPage() {
     }
 
     const supabase = createClient();
+    let organizationId = orgId;
 
-    // Get organization ID
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("slug", orgSlug)
-      .single();
+    if (!organizationId) {
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("slug", orgSlug)
+        .single();
 
-    if (!org) {
-      setError("Organization not found");
-      setIsLoading(false);
-      return;
+      if (!org) {
+        setError("Organization not found");
+        setIsLoading(false);
+        return;
+      }
+      organizationId = org.id;
+      setOrgId(org.id);
     }
 
     const { error: insertError } = await supabase.from("alumni").insert({
-      organization_id: org.id,
+      organization_id: organizationId,
       first_name: formData.first_name,
       last_name: formData.last_name,
       email: formData.email || null,
@@ -100,6 +164,26 @@ export default function NewAlumniPage() {
         description="Add an alumni to your organization&apos;s network"
         backHref={`/${orgSlug}/alumni`}
       />
+
+      {quota && (
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Plan: {quota.bucket} ·{" "}
+            {quota.alumniLimit === null
+              ? `${quota.alumniCount} alumni (unlimited plan)`
+              : `${quota.alumniCount}/${quota.alumniLimit} alumni used`}
+          </p>
+          <Link href={`/${orgSlug}/settings/invites`} className="text-sm text-emerald-600 hover:text-emerald-700">
+            Manage subscription
+          </Link>
+        </div>
+      )}
+
+      {quota?.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit && (
+        <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm">
+          Alumni limit reached. Upgrade your plan from Settings → Invites to add more alumni.
+        </div>
+      )}
 
       <Card className="max-w-2xl">
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
@@ -226,7 +310,14 @@ export default function NewAlumniPage() {
             <Button type="button" variant="secondary" onClick={() => router.back()}>
               Cancel
             </Button>
-            <Button type="submit" isLoading={isLoading}>
+            <Button
+              type="submit"
+              isLoading={isLoading}
+              disabled={
+                isLoadingQuota ||
+                (quota?.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit)
+              }
+            >
               Add Alumni
             </Button>
           </div>
@@ -235,4 +326,3 @@ export default function NewAlumniPage() {
     </div>
   );
 }
-
