@@ -179,7 +179,7 @@ export default function NewAlumniPage() {
         </div>
       )}
 
-      {quota?.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit && (
+      {quota && quota.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit && (
         <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm">
           Alumni limit reached. Upgrade your plan from Settings → Invites to add more alumni.
         </div>
@@ -315,7 +315,7 @@ export default function NewAlumniPage() {
               isLoading={isLoading}
               disabled={
                 isLoadingQuota ||
-                (quota?.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit)
+                (quota && quota.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit)
               }
             >
               Add Alumni
