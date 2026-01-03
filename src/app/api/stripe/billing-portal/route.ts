@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
+import type { Database } from "@/types/database";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -58,18 +59,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data: subscription } = await supabase
+  type OrgSub = Database["public"]["Tables"]["organization_subscriptions"]["Row"];
+  const { data: subscription, error: subError } = await supabase
     .from("organization_subscriptions")
     .select("stripe_customer_id, stripe_subscription_id")
     .eq("organization_id", organization.id)
     .maybeSingle();
 
-  let stripeCustomerId = subscription?.stripe_customer_id || null;
+  if (subError) {
+    console.error("[billing-portal] Failed to load subscription row", subError);
+  }
+
+  let stripeCustomerId = (subscription as OrgSub | null)?.stripe_customer_id || null;
+  const stripeSubId = (subscription as OrgSub | null)?.stripe_subscription_id || null;
 
   // Attempt to backfill missing customer from Stripe using subscription id
-  if (!stripeCustomerId && subscription?.stripe_subscription_id) {
+  if (!stripeCustomerId && stripeSubId) {
     try {
-      const sub = await stripe.subscriptions.retrieve(subscription.stripe_subscription_id);
+      const sub = await stripe.subscriptions.retrieve(stripeSubId);
       const customerId =
         typeof sub.customer === "string" ? sub.customer : sub.customer?.id || null;
       if (customerId) {
@@ -86,7 +93,13 @@ export async function POST(req: Request) {
   }
 
   if (!stripeCustomerId) {
-    return NextResponse.json({ error: "No Stripe customer found for this org" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: "No Stripe customer found for this org",
+        stripe_subscription_id: stripeSubId,
+      },
+      { status: 400 },
+    );
   }
 
   const session = await stripe.billingPortal.sessions.create({
@@ -96,7 +109,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ url: session.url });
 }
-
 
 
 
