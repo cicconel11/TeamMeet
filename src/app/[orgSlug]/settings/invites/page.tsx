@@ -475,7 +475,7 @@ export default function InvitesPage() {
           </div>
         </div>
 
-        {quota?.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit && (
+        {quota && quota.alumniLimit !== null && quota.alumniCount >= quota.alumniLimit && (
           <div className="mt-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm">
             Alumni limit reached. Upgrade to add more alumni.
           </div>
