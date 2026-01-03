@@ -13,13 +13,25 @@ interface RouteParams {
   params: Promise<{ organizationId: string }>;
 }
 
+type QuotaRow = {
+  bucket?: string | null;
+  alumni_limit?: number | null;
+  alumni_count?: number | null;
+  status?: string | null;
+};
+
 const fetchQuota = async (client: ReturnType<typeof createServiceClient>, orgId: string) => {
-  const rpc = client.rpc as unknown as (
-    fn: "get_alumni_quota",
-    args: { p_org_id: string }
-  ) => Promise<{ data: unknown }>;
-  const { data } = await rpc("get_alumni_quota", { p_org_id: orgId });
-  return data;
+  const rpc = (
+    client as unknown as {
+      rpc: (fn: string, args: { p_org_id: string }) => Promise<{ data: unknown; error: unknown }>;
+    }
+  ).rpc;
+  const { data, error } = await rpc("get_alumni_quota", { p_org_id: orgId });
+  if (error) {
+    console.error("[subscription] get_alumni_quota failed", error);
+    return null;
+  }
+  return data as QuotaRow | null;
 };
 
 async function requireAdmin(orgId: string) {
@@ -77,15 +89,13 @@ export async function GET(_req: Request, { params }: RouteParams) {
     .maybeSingle();
 
   const bucket = normalizeBucket(
-    (quotaData as { bucket?: string } | null)?.bucket ??
+    quotaData?.bucket ??
     (sub?.alumni_bucket as string | null) ??
     "none",
   );
   const alumniLimit = getAlumniLimit(bucket);
 
-  let alumniCount =
-    (quotaData as { alumni_count?: number } | null)?.alumni_count ??
-    0;
+  let alumniCount = quotaData?.alumni_count ?? 0;
   if (alumniCount === 0) {
     const { count } = await serviceSupabase
       .from("alumni")
@@ -96,7 +106,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   }
 
   const status =
-    (quotaData as { status?: string } | null)?.status ??
+    quotaData?.status ??
     (sub?.status as string | undefined) ??
     "pending";
 
@@ -153,7 +163,7 @@ export async function POST(req: Request, { params }: RouteParams) {
 
   if (currentBucket === targetBucket) {
     const quotaData = await fetchQuota(serviceSupabase, organizationId);
-    const alumniCount = (quotaData as { alumni_count?: number } | null)?.alumni_count ?? 0;
+    const alumniCount = quotaData?.alumni_count ?? 0;
     const alumniLimit = getAlumniLimit(targetBucket);
     return buildQuotaResponse({
       bucket: targetBucket,
@@ -165,7 +175,7 @@ export async function POST(req: Request, { params }: RouteParams) {
   }
 
   const quotaData = await fetchQuota(serviceSupabase, organizationId);
-  const alumniCount = (quotaData as { alumni_count?: number } | null)?.alumni_count ?? 0;
+  const alumniCount = quotaData?.alumni_count ?? 0;
 
   const targetLimit = getAlumniLimit(targetBucket);
   if (targetLimit !== null && alumniCount > targetLimit) {
