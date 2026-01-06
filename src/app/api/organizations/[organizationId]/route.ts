@@ -34,8 +34,8 @@ const navEntrySchema = z
 
 const patchSchema = z
   .object({
-    navConfig: z.record(navEntrySchema).optional(),
-    nav_config: z.record(navEntrySchema).optional(),
+    navConfig: z.record(z.string(), navEntrySchema).optional(),
+    nav_config: z.record(z.string(), navEntrySchema).optional(),
   })
   .strict();
 const ALLOWED_NAV_PATHS = new Set(ORG_NAV_ITEMS.map((item) => item.href));

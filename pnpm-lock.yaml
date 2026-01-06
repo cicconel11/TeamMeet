@@ -38,6 +38,9 @@ importers:
       stripe:
         specifier: ^20.0.0
         version: 20.1.0(@types/node@20.19.27)
+      zod:
+        specifier: ^4.3.5
+        version: 4.3.5
     devDependencies:
       '@types/node':
         specifier: ^20
@@ -1997,6 +2000,9 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
+
+  zod@4.3.5:
+    resolution: {integrity: sha512-k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g==}
 
 snapshots:
 
@@ -4191,3 +4197,5 @@ snapshots:
   yaml@0.2.3: {}
 
   yocto-queue@0.1.0: {}
+
+  zod@4.3.5: {}

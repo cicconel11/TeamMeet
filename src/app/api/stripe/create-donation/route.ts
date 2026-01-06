@@ -99,6 +99,10 @@ export async function POST(req: Request) {
       ? { column: "slug", value: body.organizationSlug }
       : null;
 
+  if (!orgFilter) {
+    return respond({ error: "organizationId or organizationSlug is required" }, 400);
+  }
+
   const { data: org, error: orgError } = await supabase
     .from("organizations")
     .select("id, slug, name, stripe_connect_account_id")
