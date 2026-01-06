@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { checkRateLimit, buildRateLimitResponse } from "@/lib/security/rate-limit";
+import { baseSchemas } from "@/lib/security/validation";
 import type { Database } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +15,30 @@ interface RouteParams {
 
 export async function POST(_req: Request, { params }: RouteParams) {
   const { organizationId } = await params;
+  const orgIdParsed = baseSchemas.uuid.safeParse(organizationId);
+  if (!orgIdParsed.success) {
+    return NextResponse.json({ error: "Invalid organization id" }, { status: 400 });
+  }
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const rateLimit = checkRateLimit(_req, {
+    userId: user?.id ?? null,
+    feature: "subscription cancellation",
+    limitPerIp: 20,
+    limitPerUser: 10,
+  });
+
+  if (!rateLimit.ok) {
+    return buildRateLimitResponse(rateLimit);
+  }
+
+  const respond = (payload: unknown, status = 200) =>
+    NextResponse.json(payload, { status, headers: rateLimit.headers });
+
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return respond({ error: "Unauthorized" }, 401);
   }
 
   // Require admin role in the organization
@@ -30,7 +50,7 @@ export async function POST(_req: Request, { params }: RouteParams) {
     .maybeSingle();
 
   if (role?.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return respond({ error: "Forbidden" }, 403);
   }
 
   const serviceSupabase = createServiceClient();
@@ -46,7 +66,7 @@ export async function POST(_req: Request, { params }: RouteParams) {
   const sub = subscription as { stripe_subscription_id: string | null; status?: string | null } | null;
 
   if (!sub) {
-    return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
+    return respond({ error: "Subscription not found" }, 404);
   }
 
   try {
@@ -63,11 +83,10 @@ export async function POST(_req: Request, { params }: RouteParams) {
     const table = "organization_subscriptions" as const;
     await serviceSupabase.from(table).update(payload).eq("organization_id", organizationId);
 
-    return NextResponse.json({ status: "canceled" });
+    return respond({ status: "canceled" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to cancel subscription";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return respond({ error: message }, 400);
   }
 }
-
 

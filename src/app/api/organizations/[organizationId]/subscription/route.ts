@@ -3,6 +3,14 @@ import type Stripe from "stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getAlumniLimit, normalizeBucket } from "@/lib/alumni-quota";
+import { checkRateLimit, buildRateLimitResponse } from "@/lib/security/rate-limit";
+import {
+  baseSchemas,
+  validateJson,
+  ValidationError,
+  validationErrorResponse,
+} from "@/lib/security/validation";
+import { z } from "zod";
 import type { AlumniBucket, SubscriptionInterval } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -118,12 +126,32 @@ async function ensureStripePlan(params: {
   }
 }
 
-async function requireAdmin(orgId: string) {
+const postSchema = z
+  .object({
+    alumniBucket: z.enum(["none", "0-200", "201-600", "601-1500", "1500+"]),
+  })
+  .strict();
+
+async function requireAdmin(req: Request, orgId: string, rateLimitLabel: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const rateLimit = checkRateLimit(req, {
+    userId: user?.id ?? null,
+    feature: rateLimitLabel,
+    limitPerIp: 60,
+    limitPerUser: 40,
+  });
+
+  if (!rateLimit.ok) {
+    return { error: buildRateLimitResponse(rateLimit) };
+  }
+
+  const respond = (payload: unknown, status = 200) =>
+    NextResponse.json(payload, { status, headers: rateLimit.headers });
+
   if (!user) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    return { error: respond({ error: "Unauthorized" }, 401) };
   }
 
   const { data: role } = await supabase
@@ -134,10 +162,10 @@ async function requireAdmin(orgId: string) {
     .maybeSingle();
 
   if (role?.role !== "admin") {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    return { error: respond({ error: "Forbidden" }, 403) };
   }
 
-  return { supabase };
+  return { supabase, user, respond, rateLimit };
 }
 
 function buildQuotaResponse(params: {
@@ -147,9 +175,9 @@ function buildQuotaResponse(params: {
   status: string;
   stripeSubscriptionId: string | null;
   stripeCustomerId: string | null;
-}) {
+}, respond: (payload: unknown, status?: number) => ReturnType<typeof NextResponse.json>) {
   const remaining = params.alumniLimit === null ? null : Math.max(params.alumniLimit - params.alumniCount, 0);
-  return NextResponse.json({
+  return respond({
     bucket: params.bucket,
     alumniLimit: params.alumniLimit,
     alumniCount: params.alumniCount,
@@ -160,11 +188,17 @@ function buildQuotaResponse(params: {
   });
 }
 
-export async function GET(_req: Request, { params }: RouteParams) {
+export async function GET(req: Request, { params }: RouteParams) {
   const { organizationId } = await params;
-  const auth = await requireAdmin(organizationId);
+  const orgIdParsed = baseSchemas.uuid.safeParse(organizationId);
+  if (!orgIdParsed.success) {
+    return NextResponse.json({ error: "Invalid organization id" }, { status: 400 });
+  }
+
+  const auth = await requireAdmin(req, organizationId, "subscription lookup");
   if ("error" in auth) return auth.error;
 
+  const { respond } = auth;
   const serviceSupabase = createServiceClient();
   const { data: sub, error: subError } = await serviceSupabase
     .from("organization_subscriptions")
@@ -174,7 +208,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
   if (subError) {
     console.error("[subscription] Failed to load subscription", subError);
-    return NextResponse.json({ error: "Unable to load subscription details" }, { status: 500 });
+    return respond({ error: "Unable to load subscription details" }, 500);
   }
 
   const { count: alumniCountRaw, error: countError } = await serviceSupabase
@@ -215,178 +249,189 @@ export async function GET(_req: Request, { params }: RouteParams) {
     status,
     stripeSubscriptionId: (sub?.stripe_subscription_id as string | null) ?? null,
     stripeCustomerId,
-  });
+  }, respond);
 }
 
 export async function POST(req: Request, { params }: RouteParams) {
-  const { organizationId } = await params;
-  const auth = await requireAdmin(organizationId);
-  if ("error" in auth) return auth.error;
-
-  const { stripe, getPriceIds } = await import("@/lib/stripe");
-
-  let body: { alumniBucket?: string };
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-  }
+    const { organizationId } = await params;
+    const orgIdParsed = baseSchemas.uuid.safeParse(organizationId);
+    if (!orgIdParsed.success) {
+      return NextResponse.json({ error: "Invalid organization id" }, { status: 400 });
+    }
 
-  if (!body.alumniBucket) {
-    return NextResponse.json({ error: "alumniBucket is required" }, { status: 400 });
-  }
+    const auth = await requireAdmin(req, organizationId, "subscription update");
+    if ("error" in auth) return auth.error;
 
-  const targetBucket = normalizeBucket(body.alumniBucket);
-  if (targetBucket === "1500+") {
-    return NextResponse.json(
-      { error: "Contact support to manage the 1500+ alumni plan." },
-      { status: 400 },
-    );
-  }
+    const { respond } = auth;
+    const { stripe, getPriceIds } = await import("@/lib/stripe");
+    let body: z.infer<typeof postSchema>;
+    try {
+      body = await validateJson(req, postSchema);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return auth.respond({ error: error.message, details: error.details }, 400);
+      }
+      throw error;
+    }
 
-  const serviceSupabase = createServiceClient();
-  const { data: sub, error: subError } = await serviceSupabase
-    .from("organization_subscriptions")
-    .select("stripe_subscription_id, stripe_customer_id, base_plan_interval, alumni_bucket, status")
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (subError) {
-    console.error("[subscription] Failed to load subscription", subError);
-    return NextResponse.json(
-      { error: "Unable to load subscription details" },
-      { status: 500 },
-    );
-  }
-
-  const stripeCustomerId = await ensureStripeCustomerId({
-    stripeSubscriptionId: sub?.stripe_subscription_id as string | null,
-    stripeCustomerId: sub?.stripe_customer_id as string | null,
-    organizationId,
-    serviceSupabase,
-  });
-
-  if (!sub?.stripe_subscription_id || !stripeCustomerId) {
-    return NextResponse.json(
-      { error: "Billing is not set up for this organization." },
-      { status: 400 },
-    );
-  }
-
-  const interval: SubscriptionInterval =
-    sub?.base_plan_interval === "year" ? "year" : "month";
-  const currentBucket = normalizeBucket(sub?.alumni_bucket as string | null);
-
-  const { count: alumniCountRaw, error: countError } = await serviceSupabase
-    .from("alumni")
-    .select("*", { count: "exact", head: true })
-    .eq("organization_id", organizationId)
-    .is("deleted_at", null);
-  const alumniCount = countError ? 0 : alumniCountRaw ?? 0;
-
-  const baseInterval: SubscriptionInterval =
-    sub?.base_plan_interval === "year" ? "year" : "month";
-
-  const planDetails = await ensureStripePlan({
-    stripeSubscriptionId: sub?.stripe_subscription_id as string | null,
-    currentBucket: currentBucket,
-    currentBaseInterval: baseInterval,
-    organizationId,
-    serviceSupabase,
-  });
-
-  if (currentBucket === targetBucket) {
-    const alumniLimit = getAlumniLimit(targetBucket);
-    return buildQuotaResponse({
-      bucket: planDetails.bucket,
-      alumniLimit,
-      alumniCount,
-      status: (sub?.status as string | undefined) ?? "active",
-      stripeSubscriptionId: sub.stripe_subscription_id as string,
-      stripeCustomerId,
-    });
-  }
-
-  const targetLimit = getAlumniLimit(targetBucket);
-  if (targetLimit !== null && alumniCount > targetLimit) {
-    return NextResponse.json(
-      { error: "You are above the alumni limit for that plan. Remove alumni or choose a larger bucket." },
-      { status: 400 },
-    );
-  }
-
-  const { basePrice, alumniPrice } = getPriceIds(interval, targetBucket);
-
-  try {
-    const subscription = (await stripe.subscriptions.retrieve(sub.stripe_subscription_id, {
-      expand: ["items.data.price"],
-    })) as Stripe.Subscription;
-
-    const items = subscription.items?.data ?? [];
-    const baseItem = items.find((item) => item.price?.id === basePrice) ?? items[0];
-
-    if (!baseItem) {
-      return NextResponse.json(
-        { error: "Unable to locate base subscription item. Please contact support." },
-        { status: 400 },
+    const targetBucket = normalizeBucket(body.alumniBucket);
+    if (targetBucket === "1500+") {
+      return respond(
+        { error: "Contact support to manage the 1500+ alumni plan." },
+        400,
       );
     }
 
-    const otherItems = items.filter((item) => item.id !== baseItem.id);
-    const addOnItem = otherItems.find((item) => item.price?.id !== basePrice) ?? null;
-    const preservedItems = otherItems.filter((item) => item.id !== addOnItem?.id);
+    const serviceSupabase = createServiceClient();
+    const { data: sub, error: subError } = await serviceSupabase
+      .from("organization_subscriptions")
+      .select("stripe_subscription_id, stripe_customer_id, base_plan_interval, alumni_bucket, status")
+      .eq("organization_id", organizationId)
+      .maybeSingle();
 
-    const updateItems: Stripe.SubscriptionUpdateParams.Item[] = [
-      { id: baseItem.id, price: basePrice, quantity: 1 },
-      ...preservedItems
-        .filter((item) => item.price?.id)
-        .map((item) => ({
-          id: item.id,
-          price: (item.price?.id as string) ?? undefined,
-          quantity: item.quantity ?? 1,
-        })),
-    ];
-
-    if (alumniPrice) {
-      if (addOnItem) {
-        updateItems.push({ id: addOnItem.id, price: alumniPrice, quantity: 1 });
-      } else {
-        updateItems.push({ price: alumniPrice, quantity: 1 });
-      }
-    } else if (addOnItem) {
-      updateItems.push({ id: addOnItem.id, deleted: true });
+    if (subError) {
+      console.error("[subscription] Failed to load subscription", subError);
+      return respond(
+        { error: "Unable to load subscription details" },
+        500,
+      );
     }
 
-    await stripe.subscriptions.update(sub.stripe_subscription_id, {
-      items: updateItems,
-      metadata: {
-        ...(subscription.metadata || {}),
-        alumni_bucket: targetBucket,
-      },
-      proration_behavior: "create_prorations",
+    const stripeCustomerId = await ensureStripeCustomerId({
+      stripeSubscriptionId: sub?.stripe_subscription_id as string | null,
+      stripeCustomerId: sub?.stripe_customer_id as string | null,
+      organizationId,
+      serviceSupabase,
     });
 
-    const alumniPlanInterval = targetBucket === "none" ? null : interval;
-    await serviceSupabase
-      .from("organization_subscriptions")
-      .update({
-        alumni_bucket: targetBucket,
-        alumni_plan_interval: alumniPlanInterval,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("organization_id", organizationId);
+    if (!sub?.stripe_subscription_id || !stripeCustomerId) {
+      return respond(
+        { error: "Billing is not set up for this organization." },
+        400,
+      );
+    }
 
-    return buildQuotaResponse({
-      bucket: targetBucket,
-      alumniLimit: targetLimit,
-      alumniCount,
-      status: (sub?.status as string | undefined) ?? "active",
-      stripeSubscriptionId: sub.stripe_subscription_id as string,
-      stripeCustomerId: sub.stripe_customer_id as string,
+    const interval: SubscriptionInterval =
+      sub?.base_plan_interval === "year" ? "year" : "month";
+    const currentBucket = normalizeBucket(sub?.alumni_bucket as string | null);
+
+    const { count: alumniCountRaw, error: countError } = await serviceSupabase
+      .from("alumni")
+      .select("*", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null);
+    const alumniCount = countError ? 0 : alumniCountRaw ?? 0;
+
+    const baseInterval: SubscriptionInterval =
+      sub?.base_plan_interval === "year" ? "year" : "month";
+
+    const planDetails = await ensureStripePlan({
+      stripeSubscriptionId: sub?.stripe_subscription_id as string | null,
+      currentBucket: currentBucket,
+      currentBaseInterval: baseInterval,
+      organizationId,
+      serviceSupabase,
     });
+
+    if (currentBucket === targetBucket) {
+      const alumniLimit = getAlumniLimit(targetBucket);
+      return buildQuotaResponse({
+        bucket: planDetails.bucket,
+        alumniLimit,
+        alumniCount,
+        status: (sub?.status as string | undefined) ?? "active",
+        stripeSubscriptionId: sub.stripe_subscription_id as string,
+        stripeCustomerId,
+      }, respond);
+    }
+
+    const targetLimit = getAlumniLimit(targetBucket);
+    if (targetLimit !== null && alumniCount > targetLimit) {
+      return respond(
+        { error: "You are above the alumni limit for that plan. Remove alumni or choose a larger bucket." },
+        400,
+      );
+    }
+
+    const { basePrice, alumniPrice } = getPriceIds(interval, targetBucket);
+
+    try {
+      const subscription = (await stripe.subscriptions.retrieve(sub.stripe_subscription_id, {
+        expand: ["items.data.price"],
+      })) as Stripe.Subscription;
+
+      const items = subscription.items?.data ?? [];
+      const baseItem = items.find((item) => item.price?.id === basePrice) ?? items[0];
+
+      if (!baseItem) {
+        return respond(
+          { error: "Unable to locate base subscription item. Please contact support." },
+          400,
+        );
+      }
+
+      const otherItems = items.filter((item) => item.id !== baseItem.id);
+      const addOnItem = otherItems.find((item) => item.price?.id !== basePrice) ?? null;
+      const preservedItems = otherItems.filter((item) => item.id !== addOnItem?.id);
+
+      const updateItems: Stripe.SubscriptionUpdateParams.Item[] = [
+        { id: baseItem.id, price: basePrice, quantity: 1 },
+        ...preservedItems
+          .filter((item) => item.price?.id)
+          .map((item) => ({
+            id: item.id,
+            price: (item.price?.id as string) ?? undefined,
+            quantity: item.quantity ?? 1,
+          })),
+      ];
+
+      if (alumniPrice) {
+        if (addOnItem) {
+          updateItems.push({ id: addOnItem.id, price: alumniPrice, quantity: 1 });
+        } else {
+          updateItems.push({ price: alumniPrice, quantity: 1 });
+        }
+      } else if (addOnItem) {
+        updateItems.push({ id: addOnItem.id, deleted: true });
+      }
+
+      await stripe.subscriptions.update(sub.stripe_subscription_id, {
+        items: updateItems,
+        metadata: {
+          ...(subscription.metadata || {}),
+          alumni_bucket: targetBucket,
+        },
+        proration_behavior: "create_prorations",
+      });
+
+      const alumniPlanInterval = targetBucket === "none" ? null : interval;
+      await serviceSupabase
+        .from("organization_subscriptions")
+        .update({
+          alumni_bucket: targetBucket,
+          alumni_plan_interval: alumniPlanInterval,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", organizationId);
+
+      return buildQuotaResponse({
+        bucket: targetBucket,
+        alumniLimit: targetLimit,
+        alumniCount,
+        status: (sub?.status as string | undefined) ?? "active",
+        stripeSubscriptionId: sub.stripe_subscription_id as string,
+        stripeCustomerId: sub.stripe_customer_id as string,
+      }, respond);
+    } catch (error) {
+      console.error("[subscription-update] Failed to update subscription", error);
+      const message = error instanceof Error ? error.message : "Unable to update subscription";
+      return respond({ error: message }, 400);
+    }
   } catch (error) {
-    console.error("[subscription-update] Failed to update subscription", error);
-    const message = error instanceof Error ? error.message : "Unable to update subscription";
-    return NextResponse.json({ error: message }, { status: 400 });
+    if (error instanceof ValidationError) {
+      return validationErrorResponse(error);
+    }
+    throw error;
   }
 }

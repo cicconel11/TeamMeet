@@ -3,8 +3,17 @@ import { stripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ORG_NAV_ITEMS } from "@/lib/navigation/nav-items";
+import { checkRateLimit, buildRateLimitResponse } from "@/lib/security/rate-limit";
+import {
+  baseSchemas,
+  optionalSafeString,
+  validateJson,
+  ValidationError,
+  validationErrorResponse,
+} from "@/lib/security/validation";
 import type { NavConfig } from "@/lib/navigation/nav-items";
 import type { OrgRole } from "@/lib/auth/role-utils";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,7 +22,22 @@ interface RouteParams {
   params: Promise<{ organizationId: string }>;
 }
 
-const ALLOWED_ROLES: OrgRole[] = ["admin", "active_member", "alumni"];
+const ALLOWED_ROLES = ["admin", "active_member", "alumni"] as const;
+const navEntrySchema = z
+  .object({
+    label: optionalSafeString(80),
+    hidden: z.boolean().optional(),
+    hiddenForRoles: z.array(z.enum(ALLOWED_ROLES)).optional(),
+    editRoles: z.array(z.enum(ALLOWED_ROLES)).optional(),
+  })
+  .strict();
+
+const patchSchema = z
+  .object({
+    navConfig: z.record(navEntrySchema).optional(),
+    nav_config: z.record(navEntrySchema).optional(),
+  })
+  .strict();
 const ALLOWED_NAV_PATHS = new Set(ORG_NAV_ITEMS.map((item) => item.href));
 
 function sanitizeNavConfig(payload: unknown): NavConfig {
@@ -56,63 +80,102 @@ function sanitizeNavConfig(payload: unknown): NavConfig {
 }
 
 export async function PATCH(req: Request, { params }: RouteParams) {
-  const { organizationId } = await params;
-
-  let body: unknown;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    const { organizationId } = await params;
+    const orgIdParsed = baseSchemas.uuid.safeParse(organizationId);
+    if (!orgIdParsed.success) {
+      return NextResponse.json({ error: "Invalid organization id" }, { status: 400 });
+    }
+
+    const parsedBody = await validateJson(req, patchSchema);
+    const navConfigInput = parsedBody.navConfig ?? parsedBody.nav_config ?? {};
+    const navConfig = sanitizeNavConfig(navConfigInput);
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const rateLimit = checkRateLimit(req, {
+      userId: user?.id ?? null,
+      feature: "organization settings",
+      limitPerIp: 40,
+      limitPerUser: 25,
+    });
+
+    if (!rateLimit.ok) {
+      return buildRateLimitResponse(rateLimit);
+    }
+
+    const respond = (payload: unknown, status = 200) =>
+      NextResponse.json(payload, { status, headers: rateLimit.headers });
+
+    if (!user) {
+      return respond({ error: "Unauthorized" }, 401);
+    }
+
+    // Require admin role in the organization
+    const { data: role } = await supabase
+      .from("user_organization_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+
+    if (role?.role !== "admin") {
+      return respond({ error: "Forbidden" }, 403);
+    }
+
+    const serviceSupabase = createServiceClient();
+    const { data: updatedOrg, error: updateError } = await serviceSupabase
+      .from("organizations")
+      .update({ nav_config: navConfig })
+      .eq("id", organizationId)
+      .select("id")
+      .maybeSingle();
+
+    if (updateError) {
+      return respond({ error: updateError.message }, 400);
+    }
+
+    if (!updatedOrg) {
+      return respond({ error: "Organization not found" }, 404);
+    }
+
+    return respond({ navConfig });
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return validationErrorResponse(error);
+    }
+    throw error;
   }
-
-  const navConfig = sanitizeNavConfig((body as Record<string, unknown>)?.navConfig ?? (body as Record<string, unknown>)?.nav_config);
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // Require admin role in the organization
-  const { data: role } = await supabase
-    .from("user_organization_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (role?.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const serviceSupabase = createServiceClient();
-  const { data: updatedOrg, error: updateError } = await serviceSupabase
-    .from("organizations")
-    .update({ nav_config: navConfig })
-    .eq("id", organizationId)
-    .select("id")
-    .maybeSingle();
-
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 400 });
-  }
-
-  if (!updatedOrg) {
-    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
-  }
-
-  return NextResponse.json({ navConfig });
 }
 
 export async function DELETE(_req: Request, { params }: RouteParams) {
   const { organizationId } = await params;
+  const orgIdParsed = baseSchemas.uuid.safeParse(organizationId);
+  if (!orgIdParsed.success) {
+    return NextResponse.json({ error: "Invalid organization id" }, { status: 400 });
+  }
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const rateLimit = checkRateLimit(_req, {
+    userId: user?.id ?? null,
+    feature: "organization deletion",
+    limitPerIp: 10,
+    limitPerUser: 5,
+    windowMs: 60_000 * 5,
+  });
+
+  if (!rateLimit.ok) {
+    return buildRateLimitResponse(rateLimit);
+  }
+
+  const respond = (payload: unknown, status = 200) =>
+    NextResponse.json(payload, { status, headers: rateLimit.headers });
+
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return respond({ error: "Unauthorized" }, 401);
   }
 
   // Require admin role in the organization
@@ -124,7 +187,7 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
     .maybeSingle();
 
   if (role?.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return respond({ error: "Forbidden" }, 403);
   }
 
   const serviceSupabase = createServiceClient();
@@ -175,9 +238,9 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
       throw new Error(orgDeleteError.message);
     }
 
-    return NextResponse.json({ success: true });
+    return respond({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to delete organization";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return respond({ error: message }, 400);
   }
 }

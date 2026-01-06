@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { stripe, getConnectAccountStatus } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
+import { checkRateLimit, buildRateLimitResponse } from "@/lib/security/rate-limit";
+import {
+  baseSchemas,
+  optionalEmail,
+  optionalSafeString,
+  validateJson,
+  ValidationError,
+} from "@/lib/security/validation";
 import {
   claimPaymentAttempt,
   ensurePaymentAttempt,
@@ -17,34 +26,61 @@ export const runtime = "nodejs";
 
 type DonationMode = "checkout" | "payment_intent";
 
-interface DonationRequest {
-  organizationId?: string;
-  organizationSlug?: string;
-  amount: number;
-  currency?: string;
-  donorName?: string;
-  donorEmail?: string;
-  eventId?: string;
-  purpose?: string;
-  mode?: DonationMode;
-  idempotencyKey?: string;
-  paymentAttemptId?: string;
-  platformFeeAmountCents?: number;
-}
+const donationSchema = z
+  .object({
+    organizationId: baseSchemas.uuid.optional(),
+    organizationSlug: baseSchemas.slug.optional(),
+    amount: z.coerce.number().min(1, "Amount must be at least 1").max(100_000, "Amount too large"),
+    currency: baseSchemas.currency.optional(),
+    donorName: optionalSafeString(120),
+    donorEmail: optionalEmail,
+    eventId: baseSchemas.uuid.optional(),
+    purpose: optionalSafeString(500),
+    mode: z.enum(["checkout", "payment_intent"]).optional(),
+    idempotencyKey: baseSchemas.idempotencyKey.optional(),
+    paymentAttemptId: baseSchemas.uuid.optional(),
+    platformFeeAmountCents: z.coerce.number().int().min(0).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!value.organizationId && !value.organizationSlug) {
+      ctx.addIssue({ code: "custom", path: ["organizationId"], message: "organizationId or organizationSlug is required" });
+    }
+  });
 
 export async function POST(req: Request) {
   const supabase = createServiceClient();
 
-  let body: DonationRequest;
+  const rateLimit = checkRateLimit(req, {
+    userId: null,
+    feature: "donation checkout",
+    limitPerIp: 45,
+    limitPerUser: 30,
+  });
+
+  if (!rateLimit.ok) {
+    return buildRateLimitResponse(rateLimit);
+  }
+
+  const respond = (payload: unknown, status = 200) =>
+    NextResponse.json(payload, { status, headers: rateLimit.headers });
+
+  let body: z.infer<typeof donationSchema>;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    body = await validateJson(req, donationSchema, { maxBodyBytes: 24_000 });
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return NextResponse.json(
+        { error: error.message, details: error.details },
+        { status: 400, headers: rateLimit.headers },
+      );
+    }
+    throw error;
   }
 
   const amountCents = Math.round(Number(body.amount || 0) * 100);
   if (!Number.isFinite(amountCents) || amountCents < 100) {
-    return NextResponse.json({ error: "Amount must be at least $1.00" }, { status: 400 });
+    return respond({ error: "Amount must be at least $1.00" }, 400);
   }
 
   const currency = normalizeCurrency(body.currency);
@@ -54,18 +90,14 @@ export async function POST(req: Request) {
     0,
     Math.min(amountCents, Number.isFinite(platformFeeCentsRaw) ? platformFeeCentsRaw : 0),
   );
-  const idempotencyKey = body.idempotencyKey?.trim() || null;
-  const paymentAttemptId = body.paymentAttemptId?.trim() || null;
+  const idempotencyKey = body.idempotencyKey ?? null;
+  const paymentAttemptId = body.paymentAttemptId ?? null;
 
   const orgFilter = body.organizationId
     ? { column: "id", value: body.organizationId }
     : body.organizationSlug
       ? { column: "slug", value: body.organizationSlug }
       : null;
-
-  if (!orgFilter) {
-    return NextResponse.json({ error: "organizationId or organizationSlug is required" }, { status: 400 });
-  }
 
   const { data: org, error: orgError } = await supabase
     .from("organizations")
@@ -74,16 +106,16 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (orgError || !org) {
-    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+    return respond({ error: "Organization not found" }, 404);
   }
 
   if (!org.stripe_connect_account_id) {
-    return NextResponse.json({ error: "Stripe is not connected for this organization" }, { status: 400 });
+    return respond({ error: "Stripe is not connected for this organization" }, 400);
   }
 
   const connectStatus = await getConnectAccountStatus(org.stripe_connect_account_id);
   if (!connectStatus.isReady) {
-    return NextResponse.json({ error: "Stripe onboarding is not completed for this organization" }, { status: 400 });
+    return respond({ error: "Stripe onboarding is not completed for this organization" }, 400);
   }
 
   if (body.eventId) {
@@ -95,7 +127,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (!event) {
-      return NextResponse.json({ error: "Philanthropy event not found for this organization" }, { status: 404 });
+      return respond({ error: "Philanthropy event not found for this organization" }, 404);
     }
   }
 
@@ -155,7 +187,7 @@ export async function POST(req: Request) {
 
     const respondWithExisting = async (candidate: typeof claimedAttempt) => {
       if (candidate.stripe_checkout_session_id && candidate.checkout_url) {
-        return NextResponse.json({
+        return respond({
           mode,
           sessionId: candidate.stripe_checkout_session_id,
           url: candidate.checkout_url,
@@ -171,7 +203,7 @@ export async function POST(req: Request) {
           stripeOptions,
         );
 
-        return NextResponse.json({
+        return respond({
           mode: "payment_intent",
           paymentIntentId: existingPi.id,
           clientSecret: existingPi.client_secret,
@@ -198,13 +230,13 @@ export async function POST(req: Request) {
         if (awaitedResponse) return awaitedResponse;
       }
 
-      return NextResponse.json(
+      return respond(
         {
           error: "Payment is already in progress for this idempotency key. Retry shortly with the same key.",
           idempotencyKey: claimedAttempt.idempotency_key,
           paymentAttemptId: claimedAttempt.id,
         },
-        { status: 409 },
+        409,
       );
     }
 
@@ -228,7 +260,7 @@ export async function POST(req: Request) {
         stripe_connected_account_id: org.stripe_connect_account_id,
       });
 
-      return NextResponse.json({
+      return respond({
         mode,
         paymentIntentId: paymentIntent.id,
         clientSecret: paymentIntent.client_secret,
@@ -284,7 +316,7 @@ export async function POST(req: Request) {
       stripe_connected_account_id: org.stripe_connect_account_id,
     });
 
-    return NextResponse.json({
+    return respond({
       mode,
       sessionId: session.id,
       url: session.url,
@@ -293,7 +325,7 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     if (error instanceof IdempotencyConflictError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return respond({ error: error.message }, 409);
     }
 
     const message = error instanceof Error ? error.message : "Unable to start donation checkout";
@@ -303,6 +335,6 @@ export async function POST(req: Request) {
       await supabase.from("payment_attempts").update({ last_error: message }).eq("idempotency_key", idempotencyKey);
     }
     console.error("[create-donation] Error:", message);
-    return NextResponse.json({ error: message }, { status: 400 });
+    return respond({ error: message }, 400);
   }
 }
