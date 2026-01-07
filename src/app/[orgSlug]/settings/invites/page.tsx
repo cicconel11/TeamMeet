@@ -38,7 +38,6 @@ interface SubscriptionInfo {
 }
 
 const BUCKET_OPTIONS: { value: AlumniBucket; label: string; limit: number | null }[] = [
-  { value: "none", label: "No alumni access (0)", limit: ALUMNI_LIMITS.none },
   { value: "0-200", label: "0–200 alumni", limit: ALUMNI_LIMITS["0-200"] },
   { value: "201-600", label: "201–600 alumni", limit: ALUMNI_LIMITS["201-600"] },
   { value: "601-1500", label: "601–1500 alumni", limit: ALUMNI_LIMITS["601-1500"] },
@@ -62,8 +61,7 @@ export default function InvitesPage() {
   const [planSuccess, setPlanSuccess] = useState<string | null>(null);
   const [isLoadingQuota, setIsLoadingQuota] = useState(true);
   const [isUpdatingPlan, setIsUpdatingPlan] = useState(false);
-  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
-  const [selectedBucket, setSelectedBucket] = useState<AlumniBucket>("none");
+  const [selectedBucket, setSelectedBucket] = useState<AlumniBucket>("0-200");
 
   // New invite form state
   const [showForm, setShowForm] = useState(false);
@@ -321,28 +319,6 @@ export default function InvitesPage() {
     }
   };
 
-  const openBillingPortal = async () => {
-    if (!orgId) return;
-    setPlanError(null);
-    setPlanSuccess(null);
-    setIsOpeningPortal(true);
-    try {
-      const res = await fetch("/api/stripe/billing-portal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organizationId: orgId }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.url) {
-        throw new Error(data.error || "Unable to open billing portal");
-      }
-      window.location.href = data.url as string;
-    } catch (err) {
-      setPlanError(err instanceof Error ? err.message : "Unable to open billing portal");
-      setIsOpeningPortal(false);
-    }
-  };
-
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopied(key);
@@ -528,14 +504,6 @@ export default function InvitesPage() {
               disabled={isLoadingQuota || !quota || (selectedBucket === quota.bucket && !!quota.stripeSubscriptionId)}
             >
               Update plan
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={openBillingPortal}
-              isLoading={isOpeningPortal}
-              disabled={isLoadingQuota || !quota || !quota.stripeSubscriptionId}
-            >
-              Billing portal
             </Button>
           </div>
         </div>
