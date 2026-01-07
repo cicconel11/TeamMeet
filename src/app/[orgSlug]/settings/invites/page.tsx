@@ -525,7 +525,7 @@ export default function InvitesPage() {
             <Button
               onClick={handleUpdatePlan}
               isLoading={isUpdatingPlan}
-              disabled={isLoadingQuota || !quota || selectedBucket === quota.bucket}
+              disabled={isLoadingQuota || !quota || (selectedBucket === quota.bucket && !!quota.stripeSubscriptionId)}
             >
               Update plan
             </Button>
