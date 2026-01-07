@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, Badge, Button, SoftDeleteButton } from "@/components/ui";
 import { PageHeader } from "@/components/layout";
 import { isOrgAdmin } from "@/lib/auth";
+import { EventRsvp, AttendanceList } from "@/components/events";
+import type { RsvpStatus } from "@/types/database";
 
 interface EventDetailPageProps {
   params: Promise<{ orgSlug: string; eventId: string }>;
@@ -37,6 +39,36 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
 
   const isAdmin = await isOrgAdmin(org.id);
   const isPast = new Date(event.start_date) < new Date();
+
+  // Get current user
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Fetch current user's RSVP
+  let userRsvpStatus: RsvpStatus | null = null;
+  if (user) {
+    const { data: userRsvp } = await supabase
+      .from("event_rsvps")
+      .select("status")
+      .eq("event_id", eventId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    userRsvpStatus = (userRsvp?.status as RsvpStatus) ?? null;
+  }
+
+  // Fetch all RSVPs with user names
+  const { data: rsvps } = await supabase
+    .from("event_rsvps")
+    .select("user_id, status, users(name, email)")
+    .eq("event_id", eventId);
+
+  const attendees = (rsvps ?? []).map((r) => {
+    const userData = Array.isArray(r.users) ? r.users[0] : r.users;
+    return {
+      userId: r.user_id,
+      userName: userData?.name || userData?.email || "Unknown",
+      status: r.status as RsvpStatus,
+    };
+  });
 
   return (
     <div className="animate-fade-in">
@@ -146,14 +178,30 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
                 <dd className="text-foreground font-medium mt-1">{event.location}</dd>
               </div>
             )}
-
-            <div className="pt-4 border-t border-border">
-              <dt className="text-sm text-muted-foreground">Created</dt>
-              <dd className="text-sm text-muted-foreground mt-1">
-                {new Date(event.created_at).toLocaleDateString()}
-              </dd>
-            </div>
           </dl>
+
+          {/* RSVP Section */}
+          {user && (
+            <div className="pt-4 mt-4 border-t border-border">
+              <EventRsvp
+                eventId={eventId}
+                organizationId={org.id}
+                userId={user.id}
+                initialStatus={userRsvpStatus}
+              />
+            </div>
+          )}
+
+          {/* Attendance List */}
+          <div className="pt-4 mt-4 border-t border-border">
+            <AttendanceList attendees={attendees} />
+          </div>
+
+          <div className="pt-4 mt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground">
+              Created {new Date(event.created_at).toLocaleDateString()}
+            </p>
+          </div>
         </Card>
       </div>
     </div>

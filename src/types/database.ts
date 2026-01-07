@@ -509,6 +509,58 @@ export type Database = {
           },
         ]
       }
+      event_rsvps: {
+        Row: {
+          id: string
+          event_id: string
+          user_id: string
+          organization_id: string
+          status: "attending" | "not_attending" | "maybe"
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          user_id: string
+          organization_id: string
+          status: "attending" | "not_attending" | "maybe"
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          user_id?: string
+          organization_id?: string
+          status?: "attending" | "not_attending" | "maybe"
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_rsvps_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_rsvps_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           apollo_company_id: string | null
@@ -1648,6 +1700,7 @@ export type CompetitionPoint = Tables<'competition_points'>;
 export type CompetitionTeam = Tables<'competition_teams'>;
 export type Donation = Tables<'donations'>;
 export type Event = Tables<'events'>;
+export type EventRsvp = Tables<'event_rsvps'>;
 export type Lead = Tables<'leads'>;
 export type Member = Tables<'members'>;
 export type MentorshipLog = Tables<'mentorship_logs'>;
@@ -1675,6 +1728,7 @@ export type MembershipStatus = Enums<'membership_status'>;
 export type UserRole = Enums<'user_role'>;
 
 // Additional type aliases for backward compatibility and convenience
+export type RsvpStatus = "attending" | "not_attending" | "maybe";
 export type AnnouncementAudience = "all" | "members" | "active_members" | "alumni" | "individuals";
 export type NotificationAudience = "members" | "alumni" | "both";
 export type NotificationChannel = "email" | "sms" | "both";
