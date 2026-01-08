@@ -88,6 +88,126 @@ export type Database = {
           },
         ]
       }
+      schedule_files: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          mime_type: string | null
+          created_at: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          mime_type?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          mime_type?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_files_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_files_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      academic_schedules: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          title: string
+          occurrence_type: "single" | "daily" | "weekly" | "monthly"
+          start_time: string
+          end_time: string
+          start_date: string
+          end_date: string | null
+          day_of_week: number | null
+          day_of_month: number | null
+          notes: string | null
+          created_at: string | null
+          updated_at: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          title: string
+          occurrence_type: "single" | "daily" | "weekly" | "monthly"
+          start_time: string
+          end_time: string
+          start_date: string
+          end_date?: string | null
+          day_of_week?: number | null
+          day_of_month?: number | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          title?: string
+          occurrence_type?: "single" | "daily" | "weekly" | "monthly"
+          start_time?: string
+          end_time?: string
+          start_date?: string
+          end_date?: string | null
+          day_of_week?: number | null
+          day_of_month?: number | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "academic_schedules_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "academic_schedules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           audience: string | null
@@ -1690,6 +1810,8 @@ export type CompositeTypes<
     : never
 
 // Table type exports
+export type AcademicSchedule = Tables<'academic_schedules'>;
+export type ScheduleFile = Tables<'schedule_files'>;
 export type Alumni = Tables<'alumni'>;
 export type Announcement = Tables<'announcements'>;
 export type ClassAction = Tables<'class_actions'>;
@@ -1736,6 +1858,7 @@ export type WorkoutStatus = "not_started" | "in_progress" | "completed";
 export type AlumniBucket = "none" | "0-200" | "201-600" | "601-1500" | "1500+";
 export type SubscriptionInterval = "month" | "year";
 export type EmbedType = "link" | "iframe";
+export type OccurrenceType = "single" | "daily" | "weekly" | "monthly";
 
 // Embed types (based on component usage)
 export interface PhilanthropyEmbed {

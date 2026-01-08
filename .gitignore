@@ -43,3 +43,6 @@ audit/
 playwright/.auth/state.json
 
 .cursor/mcp.json
+
+# opencode auth tool
+opencode-auth/
