@@ -30,6 +30,7 @@ export const ORG_NAV_ITEMS: OrgNavItem[] = [
   { href: "/philanthropy", label: "Philanthropy", icon: HeartIcon, roles: ["admin", "active_member", "alumni"] },
   { href: "/donations", label: "Donations", icon: DollarIcon, roles: ["admin", "active_member", "alumni"] },
   { href: "/records", label: "Records", icon: TrophyIcon, roles: ["admin", "active_member"] },
+  { href: "/schedules", label: "Schedules", icon: BookOpenIcon, roles: ["admin", "active_member", "alumni"] },
   { href: "/forms", label: "Forms", icon: ClipboardIcon, roles: ["admin", "active_member", "alumni"] },
   { href: "/settings", label: "Settings", icon: SettingsIcon, roles: ["admin", "active_member", "alumni"], configurable: false },
   { href: "/settings/invites", label: "Invite", icon: InviteIcon, roles: ["admin"] },
@@ -153,6 +154,14 @@ function SettingsIcon({ className }: { className?: string }) {
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.938a1.5 1.5 0 012.812 0l.316.949a1.5 1.5 0 002.02.948l.93-.34a1.5 1.5 0 011.882.82l.012.03a1.5 1.5 0 01-.534 1.83l-.805.584a1.5 1.5 0 000 2.45l.805.584a1.5 1.5 0 01.522 1.84l-.014.03a1.5 1.5 0 01-1.882.82l-.93-.34a1.5 1.5 0 00-2.02.948l-.316.949a1.5 1.5 0 01-2.812 0l-.316-.949a1.5 1.5 0 00-2.02-.948l-.93.34a1.5 1.5 0 01-1.882-.82l-.012-.03a1.5 1.5 0 01.534-1.83l.805-.584a1.5 1.5 0 000-2.45l-.805-.584a1.5 1.5 0 01-.522-1.84l.014-.03a1.5 1.5 0 011.882-.82l.93.34a1.5 1.5 0 002.02-.948l.316-.949z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 12a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+    </svg>
+  );
+}
+
+function BookOpenIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
     </svg>
   );
 }

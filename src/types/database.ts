@@ -88,113 +88,50 @@ export type Database = {
           },
         ]
       }
-      form_documents: {
+      schedule_files: {
         Row: {
           id: string
           organization_id: string
-          title: string
-          description: string | null
+          user_id: string
           file_name: string
           file_path: string
           file_size: number | null
           mime_type: string | null
-          is_active: boolean
-          created_by: string | null
           created_at: string | null
-          updated_at: string | null
           deleted_at: string | null
         }
         Insert: {
           id?: string
           organization_id: string
-          title: string
-          description?: string | null
-          file_name: string
-          file_path: string
-          file_size?: number | null
-          mime_type?: string | null
-          is_active?: boolean
-          created_by?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          deleted_at?: string | null
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          title?: string
-          description?: string | null
-          file_name?: string
-          file_path?: string
-          file_size?: number | null
-          mime_type?: string | null
-          is_active?: boolean
-          created_by?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          deleted_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "form_documents_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      form_document_submissions: {
-        Row: {
-          id: string
-          document_id: string
-          organization_id: string
-          user_id: string
-          file_name: string
-          file_path: string
-          file_size: number | null
-          mime_type: string | null
-          submitted_at: string | null
-        }
-        Insert: {
-          id?: string
-          document_id: string
-          organization_id: string
           user_id: string
           file_name: string
           file_path: string
           file_size?: number | null
           mime_type?: string | null
-          submitted_at?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
         }
         Update: {
           id?: string
-          document_id?: string
           organization_id?: string
           user_id?: string
           file_name?: string
           file_path?: string
           file_size?: number | null
           mime_type?: string | null
-          submitted_at?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "form_document_submissions_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "form_documents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "form_document_submissions_organization_id_fkey"
+            foreignKeyName: "schedule_files_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "form_document_submissions_user_id_fkey"
+            foreignKeyName: "schedule_files_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -202,15 +139,20 @@ export type Database = {
           },
         ]
       }
-      forms: {
+      academic_schedules: {
         Row: {
           id: string
           organization_id: string
+          user_id: string
           title: string
-          description: string | null
-          fields: FormField[]
-          is_active: boolean
-          created_by: string | null
+          occurrence_type: "single" | "daily" | "weekly" | "monthly"
+          start_time: string
+          end_time: string
+          start_date: string
+          end_date: string | null
+          day_of_week: number | null
+          day_of_month: number | null
+          notes: string | null
           created_at: string | null
           updated_at: string | null
           deleted_at: string | null
@@ -218,86 +160,47 @@ export type Database = {
         Insert: {
           id?: string
           organization_id: string
+          user_id: string
           title: string
-          description?: string | null
-          fields: FormField[]
-          is_active?: boolean
-          created_by?: string | null
+          occurrence_type: "single" | "daily" | "weekly" | "monthly"
+          start_time: string
+          end_time: string
+          start_date: string
+          end_date?: string | null
+          day_of_week?: number | null
+          day_of_month?: number | null
+          notes?: string | null
           created_at?: string | null
           updated_at?: string | null
           deleted_at?: string | null
         }
         Update: {
           id?: string
-          organization_id?: string
-          title?: string
-          description?: string | null
-          fields?: FormField[]
-          is_active?: boolean
-          created_by?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          deleted_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "forms_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "forms_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      form_submissions: {
-        Row: {
-          id: string
-          form_id: string
-          organization_id: string
-          user_id: string
-          responses: { [key: string]: unknown }
-          submitted_at: string | null
-        }
-        Insert: {
-          id?: string
-          form_id: string
-          organization_id: string
-          user_id: string
-          responses: { [key: string]: unknown }
-          submitted_at?: string | null
-        }
-        Update: {
-          id?: string
-          form_id?: string
           organization_id?: string
           user_id?: string
-          responses?: { [key: string]: unknown }
-          submitted_at?: string | null
+          title?: string
+          occurrence_type?: "single" | "daily" | "weekly" | "monthly"
+          start_time?: string
+          end_time?: string
+          start_date?: string
+          end_date?: string | null
+          day_of_week?: number | null
+          day_of_month?: number | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "form_submissions_form_id_fkey"
-            columns: ["form_id"]
-            isOneToOne: false
-            referencedRelation: "forms"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "form_submissions_organization_id_fkey"
+            foreignKeyName: "academic_schedules_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "form_submissions_user_id_fkey"
+            foreignKeyName: "academic_schedules_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -1717,6 +1620,219 @@ export type Database = {
           },
         ]
       }
+      forms: {
+        Row: {
+          id: string
+          organization_id: string
+          title: string
+          description: string | null
+          fields: unknown
+          is_active: boolean
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          title: string
+          description?: string | null
+          fields: unknown
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          title?: string
+          description?: string | null
+          fields?: unknown
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forms_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_submissions: {
+        Row: {
+          id: string
+          form_id: string
+          organization_id: string
+          user_id: string
+          data: unknown
+          submitted_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          form_id: string
+          organization_id: string
+          user_id: string
+          data: unknown
+          submitted_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          form_id?: string
+          organization_id?: string
+          user_id?: string
+          data?: unknown
+          submitted_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_submissions_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "forms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_submissions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_submissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_documents: {
+        Row: {
+          id: string
+          organization_id: string
+          title: string
+          description: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          mime_type: string | null
+          is_active: boolean
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          title: string
+          description?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          mime_type?: string | null
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          title?: string
+          description?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          mime_type?: string | null
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_document_submissions: {
+        Row: {
+          id: string
+          document_id: string
+          organization_id: string
+          user_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          mime_type: string | null
+          submitted_at: string | null
+        }
+        Insert: {
+          id?: string
+          document_id: string
+          organization_id: string
+          user_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          mime_type?: string | null
+          submitted_at?: string | null
+        }
+        Update: {
+          id?: string
+          document_id?: string
+          organization_id?: string
+          user_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          mime_type?: string | null
+          submitted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_document_submissions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "form_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_document_submissions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_document_submissions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1907,15 +2023,26 @@ export type CompositeTypes<
     : never
 
 // Table type exports
+export type AcademicSchedule = Tables<'academic_schedules'>;
+export type ScheduleFile = Tables<'schedule_files'>;
+export type Form = Tables<'forms'>;
+export type FormSubmission = Tables<'form_submissions'>;
+export type FormDocument = Tables<'form_documents'>;
+export type FormDocumentSubmission = Tables<'form_document_submissions'>;
+
+export type FormFieldType = 'text' | 'textarea' | 'email' | 'phone' | 'date' | 'select' | 'checkbox' | 'radio';
+export interface FormField {
+  name: string;
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+  options?: string[];
+}
 export type Alumni = Tables<'alumni'>;
 export type Announcement = Tables<'announcements'>;
 export type ClassAction = Tables<'class_actions'>;
 export type ClassActionDoc = Tables<'class_action_docs'>;
 export type ClassActionPersona = Tables<'class_action_personas'>;
-export type Form = Tables<'forms'>;
-export type FormSubmission = Tables<'form_submissions'>;
-export type FormDocument = Tables<'form_documents'>;
-export type FormDocumentSubmission = Tables<'form_document_submissions'>;
 export type Competition = Tables<'competitions'>;
 export type CompetitionPoint = Tables<'competition_points'>;
 export type CompetitionTeam = Tables<'competition_teams'>;
@@ -1957,15 +2084,7 @@ export type WorkoutStatus = "not_started" | "in_progress" | "completed";
 export type AlumniBucket = "none" | "0-200" | "201-600" | "601-1500" | "1500+";
 export type SubscriptionInterval = "month" | "year";
 export type EmbedType = "link" | "iframe";
-export type FormFieldType = "text" | "textarea" | "email" | "phone" | "date" | "select" | "checkbox" | "radio" | "file";
-
-export interface FormField {
-  name: string;
-  type: FormFieldType;
-  label: string;
-  required: boolean;
-  options?: string[]; // For select, radio, checkbox
-}
+export type OccurrenceType = "single" | "daily" | "weekly" | "monthly";
 
 // Embed types (based on component usage)
 export interface PhilanthropyEmbed {
