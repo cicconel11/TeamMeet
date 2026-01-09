@@ -29,6 +29,22 @@ function adjustColor(hex: string, amount: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
+function isColorDark(hex: string): boolean {
+  let color = hex.replace("#", "");
+  if (color.length === 3) {
+    color = color
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const num = parseInt(color, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance < 0.6;
+}
+
 export default function OrgSettingsPage() {
   const params = useParams();
   const router = useRouter();
@@ -159,12 +175,32 @@ export default function OrgSettingsPage() {
   const applyThemeLocally = (nextPrimary: string, nextSecondary: string) => {
     const shell = document.querySelector<HTMLElement>("[data-org-shell]");
     const target = shell || document.documentElement;
+    const primaryLight = adjustColor(nextPrimary, 20);
+    const primaryDark = adjustColor(nextPrimary, -20);
+    const secondaryLight = adjustColor(nextSecondary, 20);
+    const secondaryDark = adjustColor(nextSecondary, -20);
+    const isPrimaryDark = isColorDark(nextPrimary);
+    const baseForeground = isPrimaryDark ? "#f8fafc" : "#0f172a";
+    const cardColor = isPrimaryDark ? adjustColor(nextPrimary, 18) : adjustColor(nextPrimary, -12);
+    const cardForeground = isColorDark(cardColor) ? "#f8fafc" : "#0f172a";
+    const muted = isPrimaryDark ? adjustColor(nextPrimary, 28) : adjustColor(nextPrimary, -20);
+    const mutedForeground = isColorDark(muted) ? "#e2e8f0" : "#475569";
+    const borderColor = isPrimaryDark ? adjustColor(nextPrimary, 35) : adjustColor(nextPrimary, -28);
+
     target.style.setProperty("--color-org-primary", nextPrimary);
-    target.style.setProperty("--color-org-primary-light", adjustColor(nextPrimary, 20));
-    target.style.setProperty("--color-org-primary-dark", adjustColor(nextPrimary, -20));
+    target.style.setProperty("--color-org-primary-light", primaryLight);
+    target.style.setProperty("--color-org-primary-dark", primaryDark);
     target.style.setProperty("--color-org-secondary", nextSecondary);
-    target.style.setProperty("--color-org-secondary-light", adjustColor(nextSecondary, 20));
-    target.style.setProperty("--color-org-secondary-dark", adjustColor(nextSecondary, -20));
+    target.style.setProperty("--color-org-secondary-light", secondaryLight);
+    target.style.setProperty("--color-org-secondary-dark", secondaryDark);
+    target.style.setProperty("--background", nextPrimary);
+    target.style.setProperty("--foreground", baseForeground);
+    target.style.setProperty("--card", cardColor);
+    target.style.setProperty("--card-foreground", cardForeground);
+    target.style.setProperty("--muted", muted);
+    target.style.setProperty("--muted-foreground", mutedForeground);
+    target.style.setProperty("--border", borderColor);
+    target.style.setProperty("--ring", nextSecondary);
   };
 
   const handlePreferenceSave = async () => {

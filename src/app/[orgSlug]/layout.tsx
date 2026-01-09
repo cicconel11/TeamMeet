@@ -58,11 +58,19 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   const primaryDark = organization.primary_color ? adjustColor(organization.primary_color, -20) : "#0f2a4f";
   const secondaryLight = organization.secondary_color ? adjustColor(organization.secondary_color, 20) : "#34d399";
   const secondaryDark = organization.secondary_color ? adjustColor(organization.secondary_color, -20) : "#047857";
+  const isPrimaryDark = isColorDark(primary);
+  const baseForeground = isPrimaryDark ? "#f8fafc" : "#0f172a";
+  const cardColor = isPrimaryDark ? adjustColor(primary, 18) : adjustColor(primary, -12);
+  const cardForeground = isColorDark(cardColor) ? "#f8fafc" : "#0f172a";
+  const muted = isPrimaryDark ? adjustColor(primary, 28) : adjustColor(primary, -20);
+  const mutedForeground = isColorDark(muted) ? "#e2e8f0" : "#475569";
+  const borderColor = isPrimaryDark ? adjustColor(primary, 35) : adjustColor(primary, -28);
+  const backgroundGradient = `linear-gradient(140deg, ${primaryDark} 0%, ${primary} 45%, ${primaryLight} 100%)`;
 
   return (
     <div 
       data-org-shell
-      className="min-h-screen bg-background"
+      className="min-h-screen"
       style={{
         // Set org primary color as CSS variable
         "--color-org-primary": primary,
@@ -71,6 +79,18 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
         "--color-org-secondary": secondary,
         "--color-org-secondary-light": secondaryLight,
         "--color-org-secondary-dark": secondaryDark,
+        // Apply org colors to global surface tokens for this layout
+        "--background": primary,
+        "--foreground": baseForeground,
+        "--card": cardColor,
+        "--card-foreground": cardForeground,
+        "--muted": muted,
+        "--muted-foreground": mutedForeground,
+        "--border": borderColor,
+        "--ring": secondary,
+        backgroundColor: primary,
+        backgroundImage: backgroundGradient,
+        color: baseForeground,
       } as React.CSSProperties}
     >
       <style
@@ -84,6 +104,14 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
               --color-org-secondary: ${secondary};
               --color-org-secondary-light: ${secondaryLight};
               --color-org-secondary-dark: ${secondaryDark};
+              --background: ${primary};
+              --foreground: ${baseForeground};
+              --card: ${cardColor};
+              --card-foreground: ${cardForeground};
+              --muted: ${muted};
+              --muted-foreground: ${mutedForeground};
+              --border: ${borderColor};
+              --ring: ${secondary};
             }
           `,
         }}
@@ -116,4 +144,20 @@ function adjustColor(hex: string, amount: number): string {
   const b = clamp((num & 0x0000FF) + amount);
   
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
+function isColorDark(hex: string): boolean {
+  let color = hex.replace("#", "");
+  if (color.length === 3) {
+    color = color
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const num = parseInt(color, 16);
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance < 0.6;
 }
