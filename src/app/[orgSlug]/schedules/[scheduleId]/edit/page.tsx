@@ -205,18 +205,33 @@ export default function EditSchedulePage() {
           />
 
           {formData.occurrence_type === "weekly" && (
-            <Select
-              multiple
-              size={7}
-              label="Days of Week"
-              value={formData.day_of_week}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                setFormData({
-                  ...formData,
-                  day_of_week: Array.from(e.target.selectedOptions, (option) => option.value),
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Days of Week</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {DAYS_OF_WEEK.map((day) => {
+                  const checked = formData.day_of_week.includes(day.value);
+                  return (
+                    <label key={day.value} className="flex items-center gap-2 text-sm text-foreground border border-border rounded-lg px-3 py-2 hover:border-org-primary transition">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-org-primary"
+                        checked={checked}
+                        onChange={(e) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            day_of_week: e.target.checked
+                              ? [...prev.day_of_week, day.value]
+                              : prev.day_of_week.filter((v) => v !== day.value),
+                          }));
+                        }}
+                      />
+                      {day.label}
+                    </label>
+                  );
                 })}
-              options={DAYS_OF_WEEK}
-            />
+              </div>
+              <p className="text-xs text-muted-foreground">Select all days this schedule repeats.</p>
+            </div>
           )}
 
           {formData.occurrence_type === "monthly" && (
