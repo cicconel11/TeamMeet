@@ -64,6 +64,9 @@ export default async function AppHomePage({ searchParams }: AppHomePageProps) {
             Team<span className="text-emerald-500">Network</span>
           </h1>
           <div className="flex items-center gap-2">
+            <form action="/auth/signout" method="POST">
+              <Button variant="ghost" size="sm" type="submit">Sign Out</Button>
+            </form>
             <Link href="/app/join">
               <Button variant="ghost" size="sm">Join Org</Button>
             </Link>
