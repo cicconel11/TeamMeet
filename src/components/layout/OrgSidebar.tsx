@@ -61,7 +61,9 @@ export function OrgSidebar({ organization, role, className = "", onClose }: OrgS
           ) : (
             <div
               className="h-10 w-10 rounded-xl flex items-center justify-center text-white font-bold text-lg"
-              style={{ backgroundColor: organization.primary_color || "var(--color-org-primary)" }}
+              style={{
+                backgroundImage: "linear-gradient(135deg, var(--color-org-primary), var(--color-org-secondary))",
+              }}
             >
               {organization.name.charAt(0)}
             </div>
@@ -86,10 +88,11 @@ export function OrgSidebar({ organization, role, className = "", onClose }: OrgS
                 <Link
                   href={href}
                   onClick={onClose}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
-                      ? "bg-org-primary text-white"
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? "bg-gradient-to-r from-org-primary to-org-secondary text-white shadow-soft"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
+                  }`}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />
                   {item.label}

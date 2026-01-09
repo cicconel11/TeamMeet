@@ -55,6 +55,7 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
 
   return (
     <div 
+      data-org-shell
       className="min-h-screen bg-background"
       style={{
         // Set org primary color as CSS variable
@@ -65,6 +66,13 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
         "--color-org-primary-dark": organization.primary_color 
           ? adjustColor(organization.primary_color, -20) 
           : "#0f2a4f",
+        "--color-org-secondary": organization.secondary_color || "#10b981",
+        "--color-org-secondary-light": organization.secondary_color
+          ? adjustColor(organization.secondary_color, 20)
+          : "#34d399",
+        "--color-org-secondary-dark": organization.secondary_color
+          ? adjustColor(organization.secondary_color, -20)
+          : "#047857",
       } as React.CSSProperties}
     >
       <div className="hidden lg:block fixed left-0 top-0 h-screen w-64 z-40">
@@ -96,4 +104,3 @@ function adjustColor(hex: string, amount: number): string {
   
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
-
