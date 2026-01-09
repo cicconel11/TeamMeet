@@ -22,13 +22,22 @@ const config: Config = {
           "primary-light": "var(--color-org-primary-light)",
           "primary-dark": "var(--color-org-primary-dark)",
         },
+        landing: {
+          navy: "rgb(var(--landing-navy-rgb) / <alpha-value>)",
+          "navy-light": "rgb(var(--landing-navy-light-rgb) / <alpha-value>)",
+          cream: "rgb(var(--landing-cream-rgb) / <alpha-value>)",
+          "cream-muted": "rgb(var(--landing-cream-muted-rgb) / <alpha-value>)",
+          green: "rgb(var(--landing-green-rgb) / <alpha-value>)",
+          "green-dark": "rgb(var(--landing-green-dark-rgb) / <alpha-value>)",
+        },
         success: "var(--success)",
         warning: "var(--warning)",
         error: "var(--error)",
         info: "var(--info)",
       },
       fontFamily: {
-        sans: ["DM Sans", "system-ui", "sans-serif"],
+        sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
+        display: ["Bitter", "Georgia", "serif"],
         mono: ["Space Mono", "monospace"],
       },
       borderRadius: {
