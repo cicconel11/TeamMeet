@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, ChangeEvent, FormEvent } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, Button, Input, Textarea, Select } from "@/components/ui";
@@ -30,7 +30,7 @@ export default function NewSchedulePage() {
     end_time: "10:00",
     start_date: new Date().toISOString().split("T")[0],
     end_date: "",
-    day_of_week: "1",
+    day_of_week: ["1"],
     day_of_month: "1",
     notes: "",
   });
@@ -49,7 +49,7 @@ export default function NewSchedulePage() {
       });
   }, [orgSlug]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
@@ -62,6 +62,12 @@ export default function NewSchedulePage() {
 
     if (formData.end_date && formData.start_date > formData.end_date) {
       setError("End date must be on or after start date");
+      setIsLoading(false);
+      return;
+    }
+
+    if (formData.occurrence_type === "weekly" && formData.day_of_week.length === 0) {
+      setError("Select at least one day of the week");
       setIsLoading(false);
       return;
     }
@@ -90,7 +96,7 @@ export default function NewSchedulePage() {
     };
 
     if (formData.occurrence_type === "weekly") {
-      insertData.day_of_week = parseInt(formData.day_of_week, 10);
+      insertData.day_of_week = formData.day_of_week.map((day) => parseInt(day, 10));
     } else if (formData.occurrence_type === "monthly") {
       insertData.day_of_month = parseInt(formData.day_of_month, 10);
     }
@@ -136,7 +142,14 @@ export default function NewSchedulePage() {
           <Select
             label="Occurrence"
             value={formData.occurrence_type}
-            onChange={(e) => setFormData({ ...formData, occurrence_type: e.target.value as OccurrenceType })}
+            onChange={(e) => {
+              const nextType = e.target.value as OccurrenceType;
+              setFormData((prev) => ({
+                ...prev,
+                occurrence_type: nextType,
+                day_of_week: nextType === "weekly" && prev.day_of_week.length === 0 ? ["1"] : prev.day_of_week,
+              }));
+            }}
             options={[
               { label: "Single event", value: "single" },
               { label: "Daily", value: "daily" },
@@ -147,9 +160,15 @@ export default function NewSchedulePage() {
 
           {formData.occurrence_type === "weekly" && (
             <Select
-              label="Day of Week"
+              multiple
+              size={7}
+              label="Days of Week"
               value={formData.day_of_week}
-              onChange={(e) => setFormData({ ...formData, day_of_week: e.target.value })}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                setFormData({
+                  ...formData,
+                  day_of_week: Array.from(e.target.selectedOptions, (option) => option.value),
+                })}
               options={DAYS_OF_WEEK}
             />
           )}

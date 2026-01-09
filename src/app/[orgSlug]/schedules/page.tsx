@@ -20,7 +20,11 @@ function formatOccurrence(schedule: AcademicSchedule): string {
     case "daily":
       return "Daily";
     case "weekly":
-      return schedule.day_of_week !== null ? `Every ${DAYS[schedule.day_of_week]}` : "Weekly";
+      if (schedule.day_of_week && schedule.day_of_week.length > 0) {
+        const labels = schedule.day_of_week.map((day) => DAYS[day]).join(", ");
+        return `Every ${labels}`;
+      }
+      return "Weekly";
     case "monthly":
       return schedule.day_of_month ? `Monthly on the ${schedule.day_of_month}${getOrdinalSuffix(schedule.day_of_month)}` : "Monthly";
     default:

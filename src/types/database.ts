@@ -150,7 +150,7 @@ export type Database = {
           end_time: string
           start_date: string
           end_date: string | null
-          day_of_week: number | null
+          day_of_week: number[] | null
           day_of_month: number | null
           notes: string | null
           created_at: string | null
@@ -167,7 +167,7 @@ export type Database = {
           end_time: string
           start_date: string
           end_date?: string | null
-          day_of_week?: number | null
+          day_of_week?: number[] | null
           day_of_month?: number | null
           notes?: string | null
           created_at?: string | null
@@ -184,7 +184,7 @@ export type Database = {
           end_time?: string
           start_date?: string
           end_date?: string | null
-          day_of_week?: number | null
+          day_of_week?: number[] | null
           day_of_month?: number | null
           notes?: string | null
           created_at?: string | null

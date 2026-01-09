@@ -88,7 +88,9 @@ export function AvailabilityGrid({ schedules, orgId }: AvailabilityGridProps) {
             applies = true;
             break;
           case "weekly":
-            applies = schedule.day_of_week === d;
+            applies = Array.isArray(schedule.day_of_week)
+              ? schedule.day_of_week.includes(d)
+              : schedule.day_of_week === d;
             break;
           case "monthly":
             applies = schedule.day_of_month === dayDate.getDate();
