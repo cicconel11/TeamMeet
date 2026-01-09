@@ -171,10 +171,10 @@ export default async function LandingPage() {
       {/* Organization types ribbon */}
       <section className="relative z-10 py-12 overflow-hidden border-y border-landing-cream/10 bg-landing-navy-light/50">
         <div className="flex items-center justify-center gap-12 text-landing-cream/40 text-sm uppercase tracking-[0.2em]">
-          {["Sports Teams", "A Cappella", "Greek Life", "Clubs", "Volunteer Orgs", "Alumni Groups"].map((type, i) => (
+          {["Sports Teams", "Greek Life", "Clubs", "Volunteer Orgs", "Alumni Groups"].map((type, i) => (
             <div key={type} className="flex items-center gap-12">
               <span className="whitespace-nowrap">{type}</span>
-              {i < 5 && <span className="text-landing-cream/20">◆</span>}
+              {i < 4 && <span className="text-landing-cream/20">◆</span>}
             </div>
           ))}
         </div>

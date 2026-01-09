@@ -1,4 +1,5 @@
 export { Button } from "./Button";
+export { ButtonLink } from "./ButtonLink";
 export { Card, CardHeader, CardTitle, CardDescription } from "./Card";
 export { Input } from "./Input";
 export { Badge } from "./Badge";

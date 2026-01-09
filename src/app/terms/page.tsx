@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Button } from "@/components/ui";
+import { ButtonLink } from "@/components/ui";
 
 type TermsSection = {
+  id: string;
   number: string;
   title: string;
   paragraphs: string[];
@@ -10,6 +11,7 @@ type TermsSection = {
 
 const termsSections: TermsSection[] = [
   {
+    id: "acceptance",
     number: "1",
     title: "Acceptance of Terms",
     paragraphs: [
@@ -17,6 +19,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "eligibility",
     number: "2",
     title: "Eligibility",
     paragraphs: [
@@ -24,6 +27,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "registration",
     number: "3",
     title: "Account Registration",
     paragraphs: [
@@ -35,6 +39,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "conduct",
     number: "4",
     title: "User Conduct",
     paragraphs: [
@@ -49,6 +54,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "ip",
     number: "5",
     title: "Intellectual Property & License",
     paragraphs: [
@@ -59,6 +65,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "payments",
     number: "6",
     title: "Payments and Subscriptions",
     paragraphs: [
@@ -68,6 +75,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "donations",
     number: "7",
     title: "Donations and Mentorship",
     paragraphs: [
@@ -76,6 +84,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "termination",
     number: "8",
     title: "Termination",
     paragraphs: [
@@ -84,6 +93,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "disclaimers",
     number: "9",
     title: "Disclaimers",
     paragraphs: [
@@ -93,6 +103,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "liability",
     number: "10",
     title: "Limitation of Liability",
     paragraphs: [
@@ -105,6 +116,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "indemnification",
     number: "11",
     title: "Indemnification",
     paragraphs: [
@@ -117,6 +129,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "arbitration",
     number: "12",
     title: "Dispute Resolution and Arbitration",
     paragraphs: [],
@@ -129,6 +142,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "changes",
     number: "13",
     title: "Changes to Terms",
     paragraphs: [
@@ -136,6 +150,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "governing-law",
     number: "14",
     title: "Governing Law",
     paragraphs: [
@@ -143,6 +158,7 @@ const termsSections: TermsSection[] = [
     ],
   },
   {
+    id: "contact",
     number: "15",
     title: "Contact Information",
     paragraphs: [
@@ -153,75 +169,137 @@ const termsSections: TermsSection[] = [
 
 export default function TermsPage() {
   return (
-    <div className="relative min-h-screen bg-slate-950 text-white">
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-black opacity-80" />
-      <div className="relative z-10">
-        <header className="border-b border-slate-900 bg-slate-950/70 backdrop-blur">
-          <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
-            <Link href="/" className="text-xl font-bold text-white hover:text-emerald-300 transition-colors">
-              Team<span className="text-emerald-400">Network</span>
-            </Link>
-            <div className="flex items-center gap-3">
-              <Link href="/" className="text-sm text-slate-200 hover:text-white">
-                Back to landing
-              </Link>
-              <Link href="/auth/signup">
-                <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
-                  Get Started
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </header>
+    <div className="landing-page min-h-screen text-landing-cream relative noise-overlay bg-landing-navy">
+      {/* Background */}
+      <div className="fixed inset-0 stripe-pattern pointer-events-none" />
+      <div className="fixed inset-0 bg-gradient-to-b from-landing-navy via-transparent to-landing-navy/90 pointer-events-none" />
 
-        <main id="top" className="max-w-6xl mx-auto px-6 py-12 space-y-10">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Legal</p>
-              <h1 className="text-3xl sm:text-4xl font-bold">TeamNetwork Terms of Service</h1>
-              <p className="text-sm text-slate-400">Last Updated: December 8, 2025</p>
+      {/* Header */}
+      <header className="relative z-20 sticky top-0 bg-landing-navy/95 backdrop-blur-md border-b border-landing-cream/10">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/" className="group flex items-center gap-2">
+            <div className="w-8 h-8 rounded bg-landing-green-dark flex items-center justify-center">
+              <span className="font-display font-bold text-white text-sm">TN</span>
             </div>
-            <Link href="#top">
-              <Button variant="secondary" className="bg-white/10 text-white hover:bg-white/20">
-                Back to top
-              </Button>
+            <span className="font-display text-xl font-bold tracking-tight">
+              Team<span className="text-landing-green">Network</span>
+            </span>
+          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-sm text-landing-cream/60 hover:text-landing-cream transition-colors">
+              ← Back to Home
             </Link>
+            <ButtonLink href="/auth/signup" className="bg-landing-green-dark hover:bg-[#059669] text-white font-semibold">
+              Get Started
+            </ButtonLink>
           </div>
+        </div>
+      </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <main className="relative z-10 max-w-6xl mx-auto px-6 py-16">
+        {/* Hero */}
+        <div className="mb-16 max-w-3xl">
+          <div className="inline-block px-4 py-1.5 rounded-full bg-landing-cream/5 text-landing-cream/60 text-xs uppercase tracking-[0.2em] mb-6">
+            Legal
+          </div>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold mb-4">Terms of Service</h1>
+          <p className="text-landing-cream/50">Last Updated: December 8, 2025</p>
+        </div>
+
+        <div className="grid lg:grid-cols-[280px_1fr] gap-12">
+          {/* TOC Sidebar */}
+          <nav className="hidden lg:block">
+            <div className="sticky top-28">
+              <p className="text-xs uppercase tracking-[0.15em] text-landing-green mb-4 font-semibold">Table of Contents</p>
+              <ul className="space-y-1">
+                {termsSections.map((s) => (
+                  <li key={s.id}>
+                    <a
+                      href={`#${s.id}`}
+                      className="text-sm text-landing-cream/50 hover:text-landing-cream transition-colors block py-2 border-l-2 border-landing-cream/10 pl-4 hover:border-landing-green hover:bg-landing-cream/5"
+                    >
+                      <span className="text-landing-cream/30 mr-2">{s.number}.</span>
+                      {s.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </nav>
+
+          {/* Content */}
+          <div className="space-y-6">
             {termsSections.map((section) => (
-              <div key={section.number} className="bg-white/[0.04] backdrop-blur-sm rounded-2xl p-5 border border-white/10">
-                <div className="flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-300 flex items-center justify-center font-semibold">
-                    {section.number}
+              <section
+                key={section.id}
+                id={section.id}
+                className="scroll-mt-28 bg-landing-navy-light/50 backdrop-blur-sm rounded-2xl p-6 lg:p-8 border border-landing-cream/10"
+              >
+                <div className="flex items-start gap-5">
+                  <div className="w-12 h-12 rounded-xl bg-landing-green/10 text-landing-green flex items-center justify-center flex-shrink-0">
+                    <span className="font-display font-bold text-lg">{section.number}</span>
                   </div>
-                  <div className="space-y-3">
-                    <h2 className="text-lg font-semibold text-white">{section.title}</h2>
+                  <div className="space-y-4 min-w-0 flex-1">
+                    <h2 className="font-display text-xl font-bold text-landing-cream">{section.title}</h2>
                     {section.paragraphs.map((paragraph, index) => (
-                      <p key={`${section.number}-paragraph-${index}`} className="text-sm text-slate-300 leading-relaxed">
+                      <p key={index} className="text-landing-cream/60 leading-relaxed">
                         {paragraph}
                       </p>
                     ))}
                     {section.bullets && (
-                      <ul className="list-disc list-inside text-sm text-slate-300 space-y-1 pl-1">
+                      <ul className="space-y-2 text-landing-cream/60 pl-1">
                         {section.bullets.map((bullet, index) => (
-                          <li key={`${section.number}-bullet-${index}`}>{bullet}</li>
+                          <li key={index} className="flex items-start gap-3">
+                            <span className="text-landing-green mt-1.5">•</span>
+                            <span className="leading-relaxed">{bullet}</span>
+                          </li>
                         ))}
                       </ul>
                     )}
                   </div>
                 </div>
-              </div>
+              </section>
             ))}
-          </div>
-        </main>
 
-        <footer className="bg-slate-950/80 border-t border-slate-900 py-8">
-          <div className="max-w-6xl mx-auto px-6 text-center text-sm text-slate-400">
-            <p>© {new Date().getFullYear()} TeamNetwork. Built with Next.js and Supabase.</p>
+            {/* Back to top */}
+            <div className="pt-8 text-center">
+              <a 
+                href="#"
+                className="inline-flex items-center gap-2 text-sm text-landing-cream/40 hover:text-landing-cream transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+                Back to top
+              </a>
+            </div>
           </div>
-        </footer>
-      </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-landing-cream/10 py-12 bg-landing-navy mt-20">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded bg-landing-green-dark flex items-center justify-center">
+                <span className="font-display font-bold text-white text-sm">TN</span>
+              </div>
+              <span className="font-display font-bold">TeamNetwork</span>
+            </div>
+            
+            <div className="flex items-center gap-8 text-sm text-landing-cream/50">
+              <Link href="/" className="hover:text-landing-cream transition-colors">Home</Link>
+              <Link href="/#pricing" className="hover:text-landing-cream transition-colors">Pricing</Link>
+              <a href="mailto:mckillopm25@gmail.com" className="hover:text-landing-cream transition-colors">Contact</a>
+            </div>
+            
+            <p className="text-sm text-landing-cream/30">
+              © {new Date().getFullYear()} TeamNetwork
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

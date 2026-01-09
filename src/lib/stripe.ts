@@ -144,4 +144,3 @@ if (shouldLogEnvAudit && !envAuditLogged) {
   console.info("✅ Supabase keys loaded successfully");
   envAuditLogged = true;
 }
-
