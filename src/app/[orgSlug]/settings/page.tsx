@@ -142,7 +142,9 @@ export default function OrgSettingsPage() {
       easing: "easeOutQuad",
     });
 
-    return () => animation.pause();
+    return () => {
+      animation.pause();
+    };
   }, [loading]);
 
   useEffect(() => {
