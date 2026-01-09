@@ -79,7 +79,7 @@ export default async function LandingPage() {
               </h1>
 
               <p className="hero-animate text-xl text-landing-cream/70 max-w-lg mb-10 leading-relaxed">
-                Member directories, events, donations, philanthropy, and records — all in one place. Built for sports teams, a cappella groups, clubs, and organizations of all kinds.
+                Member directories, events, donations, philanthropy, and records — all in one place. Built for sports teams, students, clubs, and organizations of all kinds.
               </p>
 
               <div className="hero-animate flex flex-col sm:flex-row gap-4">
