@@ -133,8 +133,7 @@ export default function OrgSettingsPage() {
 
   useEffect(() => {
     if (loading) return;
-    const animation = animate({
-      targets: ".org-settings-card",
+    const animation = animate(".org-settings-card", {
       opacity: [0, 1],
       translateY: [12, 0],
       delay: stagger(70),
@@ -149,8 +148,7 @@ export default function OrgSettingsPage() {
 
   useEffect(() => {
     if (loading) return;
-    animate({
-      targets: ".org-brand-preview",
+    animate(".org-brand-preview", {
       scale: [0.98, 1],
       opacity: [0.9, 1],
       duration: 480,
