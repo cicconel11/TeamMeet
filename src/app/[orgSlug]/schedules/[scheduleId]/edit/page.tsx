@@ -60,7 +60,7 @@ export default function EditSchedulePage() {
           start_date: data.start_date,
           end_date: data.end_date || "",
           day_of_week: Array.isArray(data.day_of_week)
-            ? data.day_of_week.map((day) => String(day))
+            ? data.day_of_week.map((day: number) => String(day))
             : data.day_of_week !== null
               ? [String(data.day_of_week)]
               : ["1"],
