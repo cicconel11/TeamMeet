@@ -35,6 +35,7 @@ interface SubscriptionInfo {
   status: string;
   stripeSubscriptionId: string | null;
   stripeCustomerId: string | null;
+  currentPeriodEnd: string | null;
 }
 
 const BUCKET_OPTIONS: { value: AlumniBucket; label: string; limit: number | null }[] = [
@@ -72,6 +73,8 @@ export default function InvitesPage() {
   const [newUses, setNewUses] = useState<string>("");
   const [newExpires, setNewExpires] = useState<string>("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const loadQuota = useCallback(async (organizationId: string) => {
@@ -229,9 +232,58 @@ export default function InvitesPage() {
 
   const cancelSubscription = async () => {
     if (!orgId) return;
-    if (!confirm("Open Stripe to cancel billing for this organization? Access will end when the period closes.")) return;
+    if (!confirm("Cancel your subscription? You will retain access until the end of your current billing period.")) return;
 
     setIsCancelling(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/organizations/${orgId}/cancel-subscription`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to cancel subscription");
+      }
+      // Refresh subscription status to show canceling state
+      await loadQuota(orgId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to cancel subscription");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const resumeSubscription = async () => {
+    if (!orgId) return;
+    if (!confirm("Resume your subscription? You will continue to be billed at the regular rate.")) return;
+
+    setIsResuming(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/organizations/${orgId}/resume-subscription`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to resume subscription");
+      }
+      // Refresh subscription status
+      await loadQuota(orgId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resume subscription");
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  const openBillingPortal = async () => {
+    if (!orgId) return;
+
+    setIsOpeningPortal(true);
     setError(null);
 
     try {
@@ -242,17 +294,17 @@ export default function InvitesPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Unable to cancel subscription");
+        throw new Error(data.error || "Unable to open billing portal");
       }
       if (data.url) {
         window.location.href = data.url as string;
         return;
       }
-      alert("Open Stripe billing to cancel the subscription.");
+      throw new Error("No billing portal URL returned");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to cancel subscription");
+      setError(err instanceof Error ? err.message : "Unable to open billing portal");
     } finally {
-      setIsCancelling(false);
+      setIsOpeningPortal(false);
     }
   };
 
@@ -738,23 +790,77 @@ export default function InvitesPage() {
         )}
       </Card>
 
+      {/* Billing Management */}
+      <Card className="p-6 mt-8 border border-gray-200 dark:border-gray-700">
+        <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+          <div>
+            <h3 className="font-semibold">Billing Management</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Manage payment methods, view invoices, or update your subscription.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={openBillingPortal}
+            isLoading={isOpeningPortal}
+            disabled={!quota?.stripeCustomerId}
+          >
+            Manage Billing
+          </Button>
+        </div>
+      </Card>
+
       {/* Danger zone */}
       <Card className="p-6 mt-8 border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-900/10">
-        <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+        <div className="flex flex-col gap-4">
           <div>
             <h3 className="text-red-700 dark:text-red-300 font-semibold">Danger Zone</h3>
             <p className="text-sm text-red-700/80 dark:text-red-200/80">
               Cancel billing or permanently delete this organization. Deletion removes all data.
             </p>
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-medium">
+                {error}
+              </p>
+            )}
           </div>
+
+          {/* Show cancellation scheduled message */}
+          {quota?.status === "canceling" && quota?.currentPeriodEnd && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                <strong>Subscription ending:</strong> Your subscription is scheduled to cancel on{" "}
+                <strong>
+                  {new Date(quota.currentPeriodEnd).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </strong>
+                . You will retain access until then.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-3 flex-wrap">
-            <Button
-              variant="secondary"
-              onClick={cancelSubscription}
-              isLoading={isCancelling}
-            >
-              Cancel Subscription
-            </Button>
+            {quota?.status === "canceling" ? (
+              <Button
+                variant="secondary"
+                onClick={resumeSubscription}
+                isLoading={isResuming}
+              >
+                Resume Subscription
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={cancelSubscription}
+                isLoading={isCancelling}
+                disabled={quota?.status === "canceled" || !quota?.stripeSubscriptionId}
+              >
+                {quota?.status === "canceled" ? "Subscription Cancelled" : "Cancel Subscription"}
+              </Button>
+            )}
             <Button
               variant="ghost"
               className="text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30"

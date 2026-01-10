@@ -13,6 +13,10 @@ interface RouteParams {
   params: Promise<{ organizationId: string }>;
 }
 
+/**
+ * Resume a subscription that was scheduled for cancellation.
+ * This sets cancel_at_period_end back to false in Stripe.
+ */
 export async function POST(_req: Request, { params }: RouteParams) {
   const { organizationId } = await params;
   const orgIdParsed = baseSchemas.uuid.safeParse(organizationId);
@@ -25,7 +29,7 @@ export async function POST(_req: Request, { params }: RouteParams) {
 
   const rateLimit = checkRateLimit(_req, {
     userId: user?.id ?? null,
-    feature: "subscription cancellation",
+    feature: "subscription resume",
     limitPerIp: 20,
     limitPerUser: 10,
   });
@@ -59,39 +63,36 @@ export async function POST(_req: Request, { params }: RouteParams) {
 
   const { data: subscription } = await serviceSupabase
     .from("organization_subscriptions")
-    .select("stripe_subscription_id, status, current_period_end")
+    .select("stripe_subscription_id, status")
     .eq("organization_id", organizationId)
     .maybeSingle();
 
   const sub = subscription as { 
     stripe_subscription_id: string | null; 
     status?: string | null;
-    current_period_end?: string | null;
   } | null;
 
   if (!sub) {
     return respond({ error: "Subscription not found" }, 404);
   }
 
+  if (sub.status !== "canceling") {
+    return respond({ error: "Subscription is not scheduled for cancellation" }, 400);
+  }
+
+  if (!sub.stripe_subscription_id) {
+    return respond({ error: "No Stripe subscription to resume" }, 400);
+  }
+
   try {
-    let currentPeriodEnd = sub.current_period_end;
+    // Resume subscription by setting cancel_at_period_end to false
+    const updatedSub = await stripe.subscriptions.update(sub.stripe_subscription_id, {
+      cancel_at_period_end: false,
+    });
 
-    if (sub.stripe_subscription_id) {
-      // Schedule cancellation at period end instead of immediate cancel
-      const updatedSub = await stripe.subscriptions.update(sub.stripe_subscription_id, {
-        cancel_at_period_end: true,
-      });
-      
-      // Get the period end from Stripe
-      if (updatedSub.current_period_end) {
-        currentPeriodEnd = new Date(updatedSub.current_period_end * 1000).toISOString();
-      }
-    }
-
-    // Update status to "canceling" to indicate scheduled cancellation
+    // Update status back to active
     const payload: OrgSubUpdate = {
-      status: "canceling",
-      current_period_end: currentPeriodEnd,
+      status: updatedSub.status || "active",
       updated_at: new Date().toISOString(),
     };
 
@@ -99,13 +100,11 @@ export async function POST(_req: Request, { params }: RouteParams) {
     await serviceSupabase.from(table).update(payload).eq("organization_id", organizationId);
 
     return respond({ 
-      status: "canceling",
-      currentPeriodEnd,
-      message: "Subscription will be cancelled at the end of the billing period",
+      status: "active",
+      message: "Subscription resumed successfully",
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to cancel subscription";
+    const message = error instanceof Error ? error.message : "Unable to resume subscription";
     return respond({ error: message }, 400);
   }
 }
-
