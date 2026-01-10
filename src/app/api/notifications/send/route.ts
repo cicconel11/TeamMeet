@@ -13,6 +13,7 @@ import {
   ValidationError,
   validationErrorResponse,
 } from "@/lib/security/validation";
+import { checkOrgReadOnly, readOnlyResponse } from "@/lib/subscription/read-only-guard";
 import type { NotificationAudience, NotificationChannel } from "@/types/database";
 
 const resend = process.env.RESEND_API_KEY
@@ -215,6 +216,12 @@ export async function POST(request: Request) {
         { error: "Only admins can send notifications" },
         403,
       );
+    }
+
+    // Block mutations if org is in grace period (read-only mode)
+    const { isReadOnly } = await checkOrgReadOnly(organizationId);
+    if (isReadOnly) {
+      return respond(readOnlyResponse(), 403);
     }
 
     if (!resolvedNotificationId && persistNotification) {

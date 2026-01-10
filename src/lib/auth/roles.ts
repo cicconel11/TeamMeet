@@ -2,11 +2,24 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { MembershipStatus, Organization, UserRole } from "@/types/database";
 import { normalizeRole, roleFlags, type OrgRole } from "./role-utils";
+import { getGracePeriodInfo, type GracePeriodInfo, type SubscriptionStatus } from "@/lib/subscription/grace-period";
 
 type OrgRoleResult = {
   role: OrgRole | null;
   status: MembershipStatus | null;
   userId: string | null;
+};
+
+export type OrgContextResult = {
+  organization: Organization | null;
+  status: MembershipStatus | null;
+  userId: string | null;
+  role: OrgRole | null;
+  isAdmin: boolean;
+  isActiveMember: boolean;
+  isAlumni: boolean;
+  subscription: SubscriptionStatus | null;
+  gracePeriod: GracePeriodInfo;
 };
 
 export async function getOrgRole(params: { orgId: string; userId?: string }): Promise<OrgRoleResult> {
@@ -52,7 +65,7 @@ export async function requireOrgRole(params: {
   return membership;
 }
 
-export async function getOrgContext(orgSlug: string) {
+export async function getOrgContext(orgSlug: string): Promise<OrgContextResult> {
   const supabase = await createClient();
   const {
     data: { session },
@@ -71,9 +84,28 @@ export async function getOrgContext(orgSlug: string) {
       organization: null as Organization | null,
       status: null as MembershipStatus | null,
       userId,
+      subscription: null,
+      gracePeriod: getGracePeriodInfo(null),
       ...flags,
     };
   }
+
+  // Fetch subscription status for the organization
+  const { data: subscriptionData } = await supabase
+    .from("organization_subscriptions")
+    .select("status, grace_period_ends_at, current_period_end")
+    .eq("organization_id", org.id)
+    .maybeSingle();
+
+  const subscription: SubscriptionStatus | null = subscriptionData
+    ? {
+        status: subscriptionData.status,
+        gracePeriodEndsAt: subscriptionData.grace_period_ends_at,
+        currentPeriodEnd: subscriptionData.current_period_end,
+      }
+    : null;
+
+  const gracePeriod = getGracePeriodInfo(subscription);
 
   const membership = await getOrgRole({ orgId: org.id, userId: userId ?? undefined });
   const flags = roleFlags(membership.role);
@@ -81,6 +113,8 @@ export async function getOrgContext(orgSlug: string) {
     organization: org as Organization,
     status: membership.status,
     userId,
+    subscription,
+    gracePeriod,
     ...flags,
   };
 }

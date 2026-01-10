@@ -73,7 +73,11 @@ export default function InvitesPage() {
   const [newUses, setNewUses] = useState<string>("");
   const [newExpires, setNewExpires] = useState<string>("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [orgName, setOrgName] = useState<string>("");
 
   const loadQuota = useCallback(async (organizationId: string) => {
     setIsLoadingQuota(true);
@@ -106,7 +110,7 @@ export default function InvitesPage() {
       // Get org
       const { data: orgs, error: orgError } = await supabase
         .from("organizations")
-        .select("id")
+        .select("id, name")
         .eq("slug", orgSlug)
         .limit(1);
 
@@ -114,6 +118,7 @@ export default function InvitesPage() {
 
       if (org && !orgError) {
         setOrgId(org.id);
+        setOrgName(org.name);
         void loadQuota(org.id);
 
         // Get invites
@@ -230,23 +235,79 @@ export default function InvitesPage() {
 
   const cancelSubscription = async () => {
     if (!orgId) return;
-    if (!confirm("Are you sure you want to cancel your subscription and permanently delete this organization? This action cannot be undone.")) return;
+    
+    const periodEnd = quota?.currentPeriodEnd 
+      ? new Date(quota.currentPeriodEnd).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+      : "the end of your billing period";
+    
+    if (!confirm(`Are you sure you want to cancel your subscription?\n\nYour subscription will remain active until ${periodEnd}. After that, you'll have 30 days of read-only access before the organization is deleted.\n\nYou can resubscribe anytime during this period.`)) {
+      return;
+    }
 
     setIsCancelling(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/organizations/${orgId}/cancel-subscription`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to cancel subscription");
+      }
+      
+      const endDate = data.currentPeriodEnd 
+        ? new Date(data.currentPeriodEnd).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+        : "the end of your billing period";
+      
+      alert(`Your subscription has been cancelled.\n\nYou will have access until ${endDate}, followed by 30 days of read-only access.\n\nYou can resubscribe anytime to keep your organization.`);
+      
+      // Reload to reflect updated status
+      if (orgId) loadQuota(orgId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to cancel subscription");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleDeleteOrganization = async () => {
+    if (!orgId) return;
+    
+    // First confirmation
+    if (!confirm("WARNING: You are about to permanently delete this organization.\n\nAll data including members, alumni, events, records, and files will be lost forever.\n\nThis action CANNOT be undone.\n\nAre you sure you want to continue?")) {
+      return;
+    }
+    
+    // Show second confirmation dialog requiring org name
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteOrganization = async () => {
+    if (!orgId || !orgName) return;
+    
+    // Check if the typed name matches the org name or slug
+    if (deleteConfirmText !== orgName && deleteConfirmText !== orgSlug) {
+      setError(`Please type "${orgName}" or "${orgSlug}" to confirm deletion.`);
+      return;
+    }
+
+    setIsDeleting(true);
     setError(null);
 
     try {
       const res = await fetch(`/api/organizations/${orgId}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Unable to cancel subscription");
+        throw new Error(data.error || "Unable to delete organization");
       }
-      alert("Organization deleted.");
+      
+      alert("Your organization has been deleted and your payments have been ended.");
       window.location.href = "/app";
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to cancel subscription");
+      setError(err instanceof Error ? err.message : "Unable to delete organization");
     } finally {
-      setIsCancelling(false);
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText("");
     }
   };
 
@@ -759,31 +820,124 @@ export default function InvitesPage() {
 
       {/* Danger zone */}
       <Card className="p-6 mt-8 border border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-900/10">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           <div>
             <h3 className="text-red-700 dark:text-red-300 font-semibold">Danger Zone</h3>
             <p className="text-sm text-red-700/80 dark:text-red-200/80">
-              Cancel billing and permanently delete this organization. This action cannot be undone.
+              These actions can affect your organization&apos;s access and data.
             </p>
-            {error && (
-              <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-medium">
-                {error}
+          </div>
+
+          {/* Cancel Subscription Section */}
+          <div className="border-t border-red-200 dark:border-red-900/40 pt-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div>
+                <h4 className="font-medium text-red-700 dark:text-red-300">Cancel Subscription</h4>
+                <p className="text-sm text-red-700/70 dark:text-red-200/70">
+                  Your subscription will remain active until the end of your billing period.
+                  After that, you&apos;ll have 30 days of read-only access to resubscribe.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={cancelSubscription}
+                isLoading={isCancelling}
+                disabled={isCancelling || !orgId || quota?.status === "canceling" || quota?.status === "canceled"}
+              >
+                {quota?.status === "canceling" ? "Cancellation Scheduled" : "Cancel Subscription"}
+              </Button>
+            </div>
+            {quota?.status === "canceling" && quota?.currentPeriodEnd && (
+              <p className="text-sm text-amber-600 dark:text-amber-400 mt-2">
+                Your subscription will end on {new Date(quota.currentPeriodEnd).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}.
               </p>
             )}
           </div>
 
-          <div className="flex gap-3 flex-wrap">
-            <Button
-              variant="secondary"
-              onClick={cancelSubscription}
-              isLoading={isCancelling}
-              disabled={isCancelling || !orgId}
-            >
-              Cancel Subscription
-            </Button>
+          {/* Delete Organization Section */}
+          <div className="border-t border-red-200 dark:border-red-900/40 pt-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div>
+                <h4 className="font-medium text-red-700 dark:text-red-300">Delete Organization</h4>
+                <p className="text-sm text-red-700/70 dark:text-red-200/70">
+                  Permanently delete this organization and all its data.
+                  This action cannot be undone.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={handleDeleteOrganization}
+                isLoading={isDeleting}
+                disabled={isDeleting || !orgId}
+                className="!bg-red-600 !text-white hover:!bg-red-700 !border-red-600"
+              >
+                Delete Organization
+              </Button>
+            </div>
           </div>
+
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400 font-medium">
+              {error}
+            </p>
+          )}
         </div>
       </Card>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="max-w-md w-full p-6 space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-red-600 dark:text-red-400">
+                Confirm Organization Deletion
+              </h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                This will permanently delete <strong>{orgName}</strong> and all associated data including:
+              </p>
+              <ul className="text-sm text-muted-foreground mt-2 list-disc list-inside">
+                <li>All members and alumni records</li>
+                <li>Events, announcements, and forms</li>
+                <li>Files and documents</li>
+                <li>Subscription and billing data</li>
+              </ul>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium block mb-2">
+                Type <span className="font-mono bg-muted px-1 rounded">{orgName}</span> or <span className="font-mono bg-muted px-1 rounded">{orgSlug}</span> to confirm:
+              </label>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={`Type "${orgName}" to confirm`}
+                className="w-full"
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmText("");
+                  setError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmDeleteOrganization}
+                disabled={isDeleting || (deleteConfirmText !== orgName && deleteConfirmText !== orgSlug)}
+                isLoading={isDeleting}
+                className="!bg-red-600 !text-white hover:!bg-red-700 !border-red-600"
+              >
+                Delete Forever
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

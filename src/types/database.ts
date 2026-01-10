@@ -1256,6 +1256,7 @@ export type Database = {
           base_plan_interval: string
           created_at: string
           current_period_end: string | null
+          grace_period_ends_at: string | null
           id: string
           organization_id: string
           status: string
@@ -1269,6 +1270,7 @@ export type Database = {
           base_plan_interval: string
           created_at?: string
           current_period_end?: string | null
+          grace_period_ends_at?: string | null
           id?: string
           organization_id: string
           status?: string
@@ -1282,6 +1284,7 @@ export type Database = {
           base_plan_interval?: string
           created_at?: string
           current_period_end?: string | null
+          grace_period_ends_at?: string | null
           id?: string
           organization_id?: string
           status?: string
