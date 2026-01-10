@@ -214,6 +214,7 @@ function buildQuotaResponse(params: {
   status: string;
   stripeSubscriptionId: string | null;
   stripeCustomerId: string | null;
+  currentPeriodEnd: string | null;
 }, respond: (payload: unknown, status?: number) => ReturnType<typeof NextResponse.json>) {
   const remaining = params.alumniLimit === null ? null : Math.max(params.alumniLimit - params.alumniCount, 0);
   return respond({
@@ -224,6 +225,7 @@ function buildQuotaResponse(params: {
     status: params.status,
     stripeSubscriptionId: params.stripeSubscriptionId,
     stripeCustomerId: params.stripeCustomerId,
+    currentPeriodEnd: params.currentPeriodEnd,
   });
 }
 
@@ -241,7 +243,7 @@ export async function GET(req: Request, { params }: RouteParams) {
   const serviceSupabase = createServiceClient();
   const { data: sub, error: subError } = await serviceSupabase
     .from("organization_subscriptions")
-    .select("alumni_bucket, status, base_plan_interval, stripe_subscription_id, stripe_customer_id")
+    .select("alumni_bucket, status, base_plan_interval, stripe_subscription_id, stripe_customer_id, current_period_end")
     .eq("organization_id", organizationId)
     .maybeSingle();
 
@@ -282,6 +284,7 @@ export async function GET(req: Request, { params }: RouteParams) {
       status: "canceled",
       stripeSubscriptionId: null,
       stripeCustomerId: null,
+      currentPeriodEnd: null,
     }, respond);
   }
 
@@ -303,6 +306,7 @@ export async function GET(req: Request, { params }: RouteParams) {
       status: "canceled",
       stripeSubscriptionId: null,
       stripeCustomerId: null,
+      currentPeriodEnd: null,
     }, respond);
   }
 
@@ -313,6 +317,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     status,
     stripeSubscriptionId: (sub?.stripe_subscription_id as string | null) ?? null,
     stripeCustomerId: customerResult.customerId,
+    currentPeriodEnd: (sub?.current_period_end as string | null) ?? null,
   }, respond);
 }
 
@@ -350,7 +355,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     const serviceSupabase = createServiceClient();
     const { data: sub, error: subError } = await serviceSupabase
       .from("organization_subscriptions")
-      .select("stripe_subscription_id, stripe_customer_id, base_plan_interval, alumni_bucket, status")
+      .select("stripe_subscription_id, stripe_customer_id, base_plan_interval, alumni_bucket, status, current_period_end")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -415,6 +420,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         status: (sub?.status as string | undefined) ?? "active",
         stripeSubscriptionId: sub.stripe_subscription_id as string,
         stripeCustomerId: customerResult.customerId,
+        currentPeriodEnd: (sub?.current_period_end as string | null) ?? null,
       }, respond);
     }
 
@@ -494,6 +500,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         status: (sub?.status as string | undefined) ?? "active",
         stripeSubscriptionId: sub.stripe_subscription_id as string,
         stripeCustomerId: sub.stripe_customer_id as string,
+        currentPeriodEnd: (sub?.current_period_end as string | null) ?? null,
       }, respond);
     } catch (error) {
       console.error("[subscription-update] Failed to update subscription", error);
