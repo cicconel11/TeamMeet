@@ -8,6 +8,7 @@ import {
   ValidationError,
   validationErrorResponse,
 } from "@/lib/security/validation";
+import { checkOrgReadOnly, readOnlyResponse } from "@/lib/subscription/read-only-guard";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,12 @@ export async function POST(req: Request) {
     const isAdmin = membership?.role === "admin" && membership.status !== "revoked";
     if (!isAdmin) {
       return respond({ error: "Forbidden" }, 403);
+    }
+
+    // Block mutations if org is in grace period (read-only mode)
+    const { isReadOnly } = await checkOrgReadOnly(org.id);
+    if (isReadOnly) {
+      return respond(readOnlyResponse(), 403);
     }
 
     let accountId = org.stripe_connect_account_id;

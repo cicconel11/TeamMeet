@@ -7,6 +7,7 @@ import type { AlumniBucket, Database, SubscriptionInterval } from "@/types/datab
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { markStripeEventProcessed, registerStripeEvent } from "@/lib/payments/stripe-events";
 import { checkWebhookRateLimit, getWebhookClientIp } from "@/lib/security/webhook-rate-limit";
+import { calculateGracePeriodEnd } from "@/lib/subscription/grace-period";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
 
   const applyUpdate = async (
     match: { organization_id?: string; stripe_subscription_id?: string },
-    data: Partial<Pick<OrgSubUpdate, "stripe_subscription_id" | "stripe_customer_id" | "status" | "current_period_end">>
+    data: Partial<Pick<OrgSubUpdate, "stripe_subscription_id" | "stripe_customer_id" | "status" | "current_period_end" | "grace_period_ends_at">>
   ) => {
     const payload = {
       ...data,
@@ -76,12 +77,12 @@ export async function POST(req: Request) {
 
   const updateByOrgId = async (
     organizationId: string,
-    data: Partial<Pick<OrgSubUpdate, "stripe_subscription_id" | "stripe_customer_id" | "status" | "current_period_end">>
+    data: Partial<Pick<OrgSubUpdate, "stripe_subscription_id" | "stripe_customer_id" | "status" | "current_period_end" | "grace_period_ends_at">>
   ) => applyUpdate({ organization_id: organizationId }, data);
 
   const updateBySubscriptionId = async (
     subscriptionId: string,
-    data: Partial<Pick<OrgSubUpdate, "stripe_customer_id" | "status" | "current_period_end">>
+    data: Partial<Pick<OrgSubUpdate, "stripe_customer_id" | "status" | "current_period_end" | "grace_period_ends_at">>
   ) => applyUpdate({ stripe_subscription_id: subscriptionId }, data);
 
   type DonationInsert = Database["public"]["Tables"]["organization_donations"]["Insert"];
@@ -450,6 +451,19 @@ export async function POST(req: Request) {
           : null;
         const status = subscription.status || "canceled";
 
+        // Set grace period when subscription is deleted (canceled)
+        // Clear grace period when subscription is reactivated (active/trialing)
+        const isDeleted = event.type === "customer.subscription.deleted";
+        const isReactivated = status === "active" || status === "trialing";
+        
+        let gracePeriodUpdate: string | null | undefined = undefined;
+        if (isDeleted) {
+          gracePeriodUpdate = calculateGracePeriodEnd();
+        } else if (isReactivated) {
+          // Clear any existing grace period when resubscribed
+          gracePeriodUpdate = null;
+        }
+
         const shouldProvision = status !== "incomplete" && status !== "incomplete_expired";
         const { organizationId } = shouldProvision
           ? await resolveOrgForSubscriptionFlow(subscription.metadata)
@@ -460,12 +474,14 @@ export async function POST(req: Request) {
             stripe_customer_id: customerId,
             status,
             current_period_end: currentPeriodEnd,
+            ...(gracePeriodUpdate !== undefined && { grace_period_ends_at: gracePeriodUpdate }),
           });
         } else {
           await updateBySubscriptionId(subscription.id, {
             status,
             current_period_end: currentPeriodEnd,
             stripe_customer_id: customerId,
+            ...(gracePeriodUpdate !== undefined && { grace_period_ends_at: gracePeriodUpdate }),
           });
         }
         break;

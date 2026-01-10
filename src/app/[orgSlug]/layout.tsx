@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { OrgSidebar } from "@/components/layout/OrgSidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { GracePeriodBanner } from "@/components/layout/GracePeriodBanner";
+import { BillingGate } from "@/components/layout/BillingGate";
 import { getOrgContext } from "@/lib/auth/roles";
 
 interface OrgLayoutProps {
@@ -48,6 +50,38 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
           </p>
         </div>
       </div>
+    );
+  }
+
+  // Handle grace period expiration - block access but don't auto-delete
+  // Deletion should only happen via explicit admin action (DELETE API call)
+  if (orgContext.gracePeriod.isGracePeriodExpired) {
+    return (
+      <BillingGate 
+        orgSlug={orgSlug} 
+        organizationId={orgContext.organization.id} 
+        status="canceled"
+        gracePeriodExpired={true}
+        isAdmin={orgContext.role === "admin"}
+      />
+    );
+  }
+
+  // Show BillingGate for non-active subscriptions (except during grace period)
+  const activeStatuses = ["active", "trialing", "canceling"];
+  const subscriptionStatus = orgContext.subscription?.status || "";
+  const shouldShowBillingGate = 
+    subscriptionStatus && 
+    !activeStatuses.includes(subscriptionStatus) && 
+    !orgContext.gracePeriod.isInGracePeriod;
+
+  if (shouldShowBillingGate) {
+    return (
+      <BillingGate 
+        orgSlug={orgSlug} 
+        organizationId={orgContext.organization.id} 
+        status={subscriptionStatus} 
+      />
     );
   }
 
@@ -114,13 +148,25 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
           `,
         }}
       />
+
+      {/* Grace period banner - shown when subscription is canceled but within 30-day grace */}
+      {orgContext.gracePeriod.isInGracePeriod && (
+        <div className="fixed top-0 left-0 right-0 z-50 lg:left-64">
+          <GracePeriodBanner 
+            daysRemaining={orgContext.gracePeriod.daysRemaining} 
+            orgSlug={orgSlug}
+            organizationId={organization.id}
+          />
+        </div>
+      )}
+
       <div className="hidden lg:block fixed left-0 top-0 h-screen w-64 z-40">
         <OrgSidebar organization={organization} role={orgContext.role} />
       </div>
 
       <MobileNav organization={organization} role={orgContext.role} />
 
-      <main className="lg:ml-64 p-4 lg:p-8 pt-20 lg:pt-8">
+      <main className={`lg:ml-64 p-4 lg:p-8 pt-20 lg:pt-8 ${orgContext.gracePeriod.isInGracePeriod ? "mt-12" : ""}`}>
         {children}
       </main>
     </div>

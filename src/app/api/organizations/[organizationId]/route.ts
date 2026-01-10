@@ -11,6 +11,7 @@ import {
   ValidationError,
   validationErrorResponse,
 } from "@/lib/security/validation";
+import { checkOrgReadOnly, readOnlyResponse } from "@/lib/subscription/read-only-guard";
 import type { NavConfig } from "@/lib/navigation/nav-items";
 import type { OrgRole } from "@/lib/auth/role-utils";
 import { z } from "zod";
@@ -122,6 +123,12 @@ export async function PATCH(req: Request, { params }: RouteParams) {
 
     if (role?.role !== "admin") {
       return respond({ error: "Forbidden" }, 403);
+    }
+
+    // Block mutations if org is in grace period (read-only mode)
+    const { isReadOnly } = await checkOrgReadOnly(organizationId);
+    if (isReadOnly) {
+      return respond(readOnlyResponse(), 403);
     }
 
     const serviceSupabase = createServiceClient();
