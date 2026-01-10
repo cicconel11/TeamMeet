@@ -29,6 +29,7 @@ export const ORG_NAV_ITEMS: OrgNavItem[] = [
   { href: "/announcements", label: "Announcements", icon: MegaphoneIcon, roles: ["admin", "active_member", "alumni"] },
   { href: "/philanthropy", label: "Philanthropy", icon: HeartIcon, roles: ["admin", "active_member", "alumni"] },
   { href: "/donations", label: "Donations", icon: DollarIcon, roles: ["admin", "active_member", "alumni"] },
+  { href: "/expenses", label: "Expenses", icon: ReceiptIcon, roles: ["admin", "active_member"] },
   { href: "/records", label: "Records", icon: TrophyIcon, roles: ["admin", "active_member"] },
   { href: "/schedules", label: "Schedules", icon: BookOpenIcon, roles: ["admin", "active_member", "alumni"] },
   { href: "/forms", label: "Forms", icon: ClipboardIcon, roles: ["admin", "active_member", "alumni"] },
@@ -97,6 +98,14 @@ function DollarIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function ReceiptIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185zM9.75 9h.008v.008H9.75V9zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 4.5h.008v.008h-.008V13.5zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
     </svg>
   );
 }
