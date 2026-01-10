@@ -560,6 +560,60 @@ export type Database = {
           },
         ]
       }
+      expenses: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          name: string
+          expense_type: string
+          amount: number
+          venmo_link: string | null
+          created_at: string | null
+          updated_at: string | null
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          name: string
+          expense_type: string
+          amount: number
+          venmo_link?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          name?: string
+          expense_type?: string
+          amount?: number
+          venmo_link?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           audience: string | null
@@ -2050,6 +2104,7 @@ export type Competition = Tables<'competitions'>;
 export type CompetitionPoint = Tables<'competition_points'>;
 export type CompetitionTeam = Tables<'competition_teams'>;
 export type Donation = Tables<'donations'>;
+export type Expense = Tables<'expenses'>;
 export type Event = Tables<'events'>;
 export type EventRsvp = Tables<'event_rsvps'>;
 export type Lead = Tables<'leads'>;
