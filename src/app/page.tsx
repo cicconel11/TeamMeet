@@ -340,7 +340,7 @@ export default async function LandingPage() {
           </h2>
 
           <p className="scroll-reveal text-xl text-landing-cream/60 mb-10 max-w-2xl mx-auto">
-            Join hundreds of teams already using TeamNetwork to stay connected across generations.
+            Join today to create new opportunities for your organization and members.
           </p>
 
           <div className="scroll-reveal flex flex-col sm:flex-row gap-4 justify-center">
